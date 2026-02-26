@@ -71,7 +71,10 @@ dmypy.txt
 
 # ruff
 .ruff_cache/
+<<<<<<< HEAD
 
 # Keys
 *.pem
 tenants.json
+=======
+>>>>>>> 28d6f65 (Added extraction modules and option to extract page ranges)

@@ -78,11 +78,10 @@ class ExtractMetadata(PydanticAIWorkflow):
     # __pydantic_ai_agents__ = [temporal_metadata_agent]
 
     @workflow.run
-    async def run(self, url: str) -> DocumentMetadata:
-        """Execute the metadata extraction workflow for the given PDF URL."""
+    async def run(self, request_data: dict) -> DocumentMetadata:
         content = await workflow.execute_activity(
             extract_pdf_content.create,
-            extract_pdf_content.ExtractPdfContentRequest(url=url),
+            extract_pdf_content.ExtractPdfContentRequest(**request_data),
             start_to_close_timeout=timedelta(minutes=5),
         )
 
