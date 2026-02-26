@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from pyrate_limiter import Duration, Limiter, Rate
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
-from temporalio.client import Client
+from temporalio.client import Client, WorkflowExecutionStatus
 
 from app.database.models import Workflow, WorkflowStatus
 from app.database.session import get_session
@@ -95,6 +95,7 @@ async def create_workflow(
 )
 async def read_workflow(
     workflow_id: str,
+    request: Request,
     session: Session = Depends(get_session),
 ):
     """Get a single workflow by its public ID."""
@@ -102,10 +103,40 @@ async def read_workflow(
         workflow = session.exec(
             select(Workflow).where(Workflow.public_id == workflow_id)
         ).one()
-        return workflow.to_dict()
+
     except SQLAlchemyError as e:
         print("Error(read_workflow)", e)
         raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if workflow.status.name not in ["SUCCESS", "ERROR"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workflow is still {workflow.status.name.lower()}. Cannot fetch results yet.",  # noqa: E501
+        )
+    try:
+        client = _get_temporal_client(request)
+        workflow_handle = client.get_workflow_handle(f"extract-metadata-{workflow_id}")
+        execution = await workflow_handle.describe()
+
+        if execution.status == WorkflowExecutionStatus.COMPLETED:
+            result = await workflow_handle.result()
+            return {
+                "status": "COMPLETED",
+                "result": result,
+                "workflow_id": workflow_id,
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Workflow status is {execution.status} for workflow {workflow_id}.",  # noqa: E501
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching results for workflow {workflow_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Could not fetch workflow results: {str(e)}"
+        ) from e
 
 
 async def workflow_event(request: Request, workflow_id: str):

@@ -103,6 +103,7 @@ name = "airdec-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fastapi-limiter" },
     { name = "httpx" },
@@ -111,6 +112,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-ai" },
+    { name = "pyjwt" },
     { name = "python-multipart" },
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
@@ -125,6 +127,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=46.0.5" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.112.1" },
     { name = "fastapi-limiter", specifier = ">=0.2.0" },
     { name = "httpx", specifier = ">=0.27.0" },
@@ -133,6 +136,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-ai", extras = ["openai"], specifier = ">=0.0.49" },
+    { name = "pyjwt", specifier = ">=2.11.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "sqlalchemy", specifier = ">=2.0.46" },
     { name = "sqlmodel", specifier = ">=0.0.37" },

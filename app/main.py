@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from temporalio.client import Client
 
+from .config import settings
 from .database.session import dispose_engine, init_engine
-from .dependencies import get_token_header
+from .dependencies import verify_jwt
 from .routers import workflows
 
 TEMPORAL_HOST = os.getenv("TEMPORAL_HOST", "localhost:7233")
@@ -21,16 +22,24 @@ async def lifespan(app: FastAPI):
     dispose_engine()
 
 
-app = FastAPI(dependencies=[Depends(get_token_header)], lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
 
-
-app.include_router(
-    workflows.router,
-    dependencies=[Depends(get_token_header)],
-)
+if settings.DISABLE_AUTH:
+    app.include_router(workflows.router)
+else:
+    app.include_router(
+        workflows.router,
+        dependencies=[Depends(verify_jwt)],
+    )
 
 
 @app.get("/")
 async def root():
     """Health check endpoint."""
     return {"message": "This is the backend service for AIRDEC!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
