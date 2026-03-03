@@ -28,8 +28,9 @@ class CreateWorkflowRequest(BaseModel):
     """Request body for creating a new workflow."""
 
     url: str
-    extractor_type: str = "pdfplumber"  # Default to pdfplumber  
-    pages: list[int] | None = None      # Page selection
+    extractor: str = "pdfplumber"  # Default to pdfplumber
+    pages: list[int] | None = None  # Page selection
+
 
 def _get_temporal_client(request: Request) -> Client:
     return request.app.state.temporal_client
@@ -97,17 +98,9 @@ async def create_workflow(
 
     try:
         client = _get_temporal_client(request)
-
-        # Convert pages list to string format for the activity
-        pages_str = ",".join(map(str, body.pages)) if body.pages else None
-
         await client.start_workflow(
             ExtractMetadata.run,
-            args=[{
-                "url": body.url,
-                "extractor_type": body.extractor_type,
-                "pages": pages_str
-            }],
+            args=[{"url": body.url, "extractor": body.extractor, "pages": body.pages}],
             id=f"extract-metadata-{workflow_id}",
             task_queue="extract-pdf-metadata-task-queue",
         )

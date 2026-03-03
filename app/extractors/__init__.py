@@ -1,21 +1,19 @@
 """PDF extraction modules."""
 
-from .pdfplumber_extractor import PdfplumberExtractor
-from .pymupdf_extractor import PymupdfExtractor
+from .pdfplumber import PdfplumberExtractor
+from .pymupdf import PymupdfExtractor
 
 
-def get_extractor(extractor_type: str = "pdfplumber"):
+def get_extractor(extractor: str = "pdfplumber"):
     """Get an extractor instance by type.
-    
+
     Args:
-        extractor_type: Either "pdfplumber" or "pymupdf"
-        
+        extractor: Either "pdfplumber" or "pymupdf"
+
     Returns:
         Extractor instance
     """
-    if extractor_type == "pymupdf":
+    if extractor == "pymupdf":
         return PymupdfExtractor()
     else:  # default to pdfplumber
         return PdfplumberExtractor()
-
-
