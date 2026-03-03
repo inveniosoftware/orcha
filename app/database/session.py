@@ -1,20 +1,9 @@
-import os
 from collections.abc import Generator
 
 from sqlalchemy import Engine
 from sqlmodel import Session, create_engine
 
-DRIVER = "psycopg"
-
-PGUSER = os.getenv("PGUSER", "postgres")
-PGPASSWORD = os.getenv("PGPASSWORD", "postgres")
-PGHOST = os.getenv("PGHOST", "localhost")
-PGPORT = os.getenv("PGPORT", "5433")
-PGDATABASE = os.getenv("PGDATABASE", "airdec")
-
-CONN_STRING = (
-    f"postgresql+{DRIVER}://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
-)
+from ..config import get_settings
 
 _engine: Engine | None = None
 
@@ -22,7 +11,8 @@ _engine: Engine | None = None
 def init_engine() -> Engine:
     """Create and store the global SQLAlchemy engine."""
     global _engine
-    _engine = create_engine(CONN_STRING)
+    settings = get_settings()
+    _engine = create_engine(settings.database_url)
     return _engine
 
 

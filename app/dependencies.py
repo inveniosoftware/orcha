@@ -1,16 +1,18 @@
 """FastAPI dependencies for authentication."""
 
-import os
 from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 
 from .auth import decode_access_token
+from .config import get_settings
 
-AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() == "true"
+settings = get_settings()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=not AUTH_DISABLED)
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="token", auto_error=not settings.auth_disabled
+)
 
 
 async def get_current_user(
@@ -27,7 +29,7 @@ async def get_current_user(
     Returns:
         The decoded JWT payload containing user information.
     """
-    if AUTH_DISABLED:
+    if settings.auth_disabled:
         return {"sub": "dev-user"}
 
     return decode_access_token(token)
