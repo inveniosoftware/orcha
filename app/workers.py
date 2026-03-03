@@ -1,20 +1,19 @@
 import asyncio
-import os
 
 from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio.client import Client
 from temporalio.worker import Worker
 
 from app.activities import extract_pdf_content
+from app.config import get_settings
 from app.workflows.extract_metadata_workflow import ExtractMetadata
-
-TEMPORAL_HOST = os.getenv("TEMPORAL_HOST", "localhost:7233")
 
 
 async def main():
     """Start the Temporal worker."""
+    settings = get_settings()
     client = await Client.connect(
-        TEMPORAL_HOST,
+        settings.temporal_host,
         plugins=[PydanticAIPlugin()],
     )
 

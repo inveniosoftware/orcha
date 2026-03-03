@@ -1,12 +1,9 @@
 """JWT authentication utilities for RS256 token verification."""
 
-import os
-
 import jwt
 from fastapi import HTTPException, status
 
-JWT_PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY", "")
-JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "RS256")
+from .config import get_settings
 
 
 def decode_access_token(token: str) -> dict:
@@ -21,7 +18,9 @@ def decode_access_token(token: str) -> dict:
     Raises:
         HTTPException: If the token is expired, invalid, or cannot be decoded.
     """
-    if not JWT_PUBLIC_KEY:
+    settings = get_settings()
+
+    if not settings.jwt_public_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="JWT_PUBLIC_KEY is not configured",
@@ -30,8 +29,8 @@ def decode_access_token(token: str) -> dict:
     try:
         payload = jwt.decode(
             token,
-            JWT_PUBLIC_KEY,
-            algorithms=[JWT_ALGORITHM],
+            settings.jwt_public_key,
+            algorithms=[settings.jwt_algorithm],
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
