@@ -1,45 +1,42 @@
-"""Utility functions for PDF extractors."""
+"""Base class for PDF extractors."""
 
-from typing import List, Optional
-
-
-def parse_pages(pages_str: Optional[str]) -> Optional[List[int]]:
-    """Parse page specification string into list of page numbers.
-    
-    Args:
-        pages_str: String like "1,3-5,10" or "-1" (last page)
-        
-    Returns:
-        List of page numbers (1-indexed), or None for all pages
-    """
-    if not pages_str:
-        return None
-    
-    pages = []
-    for part in pages_str.split(','):
-        part = part.strip()
-        if '-' in part and not part.startswith('-'):
-            # Range like "3-5"
-            start, end = part.split('-', 1)
-            start, end = int(start), int(end)
-            pages.extend(range(start, end + 1))
-        else:
-            # Single page number (including negative like "-1")
-            pages.append(int(part))
-    
-    return pages
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
 
 
-def resolve_pages(pages: Optional[List[int]], total_pages: int) -> Optional[List[int]]:
-    """Resolve page list with negative indices to 0-based page numbers."""
-    if pages is None:
-        return None
-    resolved = []
-    for p in pages:
-        if p < 0:
-            idx = total_pages + p  # -1 -> last page
-        else:
-            idx = p - 1  # convert 1-based to 0-based
-        if 0 <= idx < total_pages:
-            resolved.append(idx)
-    return sorted(set(resolved))
+class BaseExtractor(ABC):
+    """Base class for PDF extractors."""
+
+    @abstractmethod
+    def extract(
+        self, pdf_bytes: bytes, pages: Optional[List[int]] = None
+    ) -> Dict[str, Any]:
+        """Extract content from PDF.
+
+        Args:
+            pdf_bytes: PDF file content as bytes.
+            pages: Optional list of pages to extract. Positive numbers are 1-based,
+                   negative numbers count from end (-1 = last page).
+                   Example: [1, 2, 3, -2, -1] = first 3 + last 2 pages.
+
+        Returns:
+            Dictionary containing extracted content. Must include:
+            - full_text: Extracted text content
+            - page_count: Total number of pages in the PDF
+            - pages_extracted: Number of pages that were actually extracted
+
+        """
+        pass
+
+    def _classify_link(self, url: str) -> str:
+        """Classify hyperlink type."""
+        url_lower = url.lower()
+        if "orcid.org" in url_lower:
+            return "orcid"
+        if "doi.org" in url_lower or url_lower.startswith("10."):
+            return "doi"
+        if url_lower.startswith("mailto:"):
+            return "email"
+        if "github.com" in url_lower or "gitlab.com" in url_lower:
+            return "github"
+        return "other"
