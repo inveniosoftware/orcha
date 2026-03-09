@@ -41,33 +41,50 @@ uv run airdec run workers    # Temporal worker
 
 ## Authentication
 
-The API uses **RS256 (asymmetric) signed JWTs**. The client signs tokens with a private key; the server verifies them with the corresponding public key.
+The API uses **multi-tenant RS256 (asymmetric) JWT authentication**. Each tenant has its own RSA key pair. The tenant signs tokens with their private key; the server verifies them using the tenant's registered public key.
 
-### Generating RSA Keys
+Tenants are identified by the `iss` (issuer) claim in the JWT.
+
+### Tenant Configuration
+
+Create a `tenants.json` file at the project root:
+
+```json
+{
+  "tenant-a": {
+    "name": "Tenant A",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+  },
+  "tenant-b": {
+    "name": "Tenant B",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+  }
+}
+```
+
+Each key in the JSON must match the `iss` claim the tenant will use in their JWTs.
+
+> ⚠️ **Never commit `tenants.json` or `.pem` files** — they are already in `.gitignore`.
+
+### Generating RSA Keys (Tenant-Side)
+
+Each tenant generates their own key pair and sends you **only the public key**:
 
 ```bash
-# Generate a 2048-bit RSA private key
+# Generate a 2048-bit RSA private key (tenant keeps this secret)
 openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:2048
 
-# Extract the public key
+# Extract the public key (send this to the server operator)
 openssl rsa -pubout -in private_key.pem -out public_key.pem
 ```
 
-> ⚠️ **Never commit `.pem` files** — they are already in `.gitignore`.
-
 ### Configuration
 
-| Variable         | Description                        | Required    |
-| ---------------- | ---------------------------------- | ----------- |
-| `JWT_PUBLIC_KEY`  | PEM-encoded RSA public key         | Production  |
-| `JWT_ALGORITHM`   | Signing algorithm (default: RS256) | No          |
-| `AUTH_DISABLED`   | Set to `true` to skip auth         | Development |
-
-**Production** — set the public key:
-
-```bash
-export JWT_PUBLIC_KEY="$(cat public_key.pem)"
-```
+| Variable              | Description                              | Required    |
+| --------------------- | ---------------------------------------- | ----------- |
+| `JWT_ALGORITHM`       | Signing algorithm (default: RS256)       | No          |
+| `AUTH_DISABLED`       | Set to `true` to skip auth               | Development |
+| `TENANTS_CONFIG_PATH` | Path to tenants JSON (default: tenants.json) | Production  |
 
 **Local development** — bypass authentication entirely:
 
@@ -75,7 +92,9 @@ export JWT_PUBLIC_KEY="$(cat public_key.pem)"
 export AUTH_DISABLED=true
 ```
 
-### Creating a Test Token (Client-Side)
+### Creating a Test Token (Tenant-Side)
+
+Tokens **must** include the `iss` claim matching the tenant ID. Optionally include `workflow_id` to scope access.
 
 ```python
 import jwt
@@ -84,7 +103,12 @@ from datetime import datetime, timedelta, timezone
 private_key = open("private_key.pem").read()
 
 token = jwt.encode(
-    {"sub": "user123", "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+    {
+        "iss": "tenant-a",                                    # Required: must match tenants.json key
+        "sub": "user123",
+        "workflow_id": "YOUR_WORKFLOW_ID",                    # Optional: scope to a specific workflow
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1)
+    },
     private_key,
     algorithm="RS256",
 )
@@ -94,7 +118,7 @@ print(token)
 Use the token:
 
 ```bash
-curl -H "Authorization: Bearer <token>" http://localhost:8000/
+curl -H "Authorization: Bearer <token>" http://localhost:8000/workflows/<YOUR_WORKFLOW_ID>
 ```
 
 ## CLI Reference

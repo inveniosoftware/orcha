@@ -1,3 +1,5 @@
+"""Database models for the AIRDEC workflow system."""
+
 from enum import Enum
 
 from nanoid import generate
@@ -21,10 +23,11 @@ class Workflow(SQLModel, table=True):
     """Database model for a workflow execution."""
 
     id: int | None = Field(default=None, primary_key=True)
-    public_id: str = Field(default=nanoid())
+    public_id: str = Field(default_factory=nanoid)
     url: str
     status: WorkflowStatus
     user_id: str
+    tenant_id: str
 
     def to_dict(self):
         """Convert workflow to a dictionary representation."""
@@ -33,4 +36,5 @@ class Workflow(SQLModel, table=True):
             "status": self.status,
             "url": self.url,
             "user_id": self.user_id,
+            "tenant_id": self.tenant_id,
         }

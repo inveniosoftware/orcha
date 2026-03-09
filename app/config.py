@@ -19,9 +19,12 @@ class Settings(BaseSettings):
     temporal_host: str = "localhost:7233"
 
     # Authentication
-    jwt_public_key: str = ""
     jwt_algorithm: str = "RS256"
     auth_disabled: bool = False
+    tenants_config_path: str = "tenants.json"
+
+    # Security
+    allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     @property
     def database_url(self) -> str:

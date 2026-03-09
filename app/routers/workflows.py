@@ -1,3 +1,5 @@
+"""Workflow API routes with tenant-scoped access control."""
+
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,8 +11,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from temporalio.client import Client
 
+from app.auth import AuthContext, decode_access_token
 from app.database.models import Workflow, WorkflowStatus
 from app.database.session import get_session
+from app.dependencies import get_current_user
 from app.workflows.extract_metadata_workflow import ExtractMetadata
 
 router = APIRouter(
@@ -32,29 +36,63 @@ def _get_temporal_client(request: Request) -> Client:
     return request.app.state.temporal_client
 
 
+def verify_workflow_access(auth: AuthContext, workflow_id: str) -> None:
+    """Verify that the JWT payload allows access to the requested workflow."""
+    if auth.workflow_id and auth.workflow_id != "*" and auth.workflow_id != workflow_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this workflow")
+
+
+def verify_tenant_owns_workflow(auth: AuthContext, workflow: Workflow) -> None:
+    """Verify the authenticated tenant owns the workflow.
+
+    Args:
+        auth: The authenticated request context.
+        workflow: The workflow database record.
+
+    Raises:
+        HTTPException: 403 if the tenant does not own the workflow.
+    """
+    if workflow.tenant_id != auth.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to access this workflow",
+        )
+
+
 @router.get(
     "/",
     dependencies=[
         Depends(RateLimiter(limiter=Limiter(Rate(10, Duration.SECOND * 30))))
     ],
 )
-async def read_workflows(session: Session = Depends(get_session)):
-    """List all workflows."""
-    workflows = session.exec(select(Workflow)).all()
+async def read_workflows(
+    auth: AuthContext = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """List all workflows for the authenticated tenant."""
+    workflows = session.exec(
+        select(Workflow).where(Workflow.tenant_id == auth.tenant_id)
+    ).all()
     return [workflow.to_dict() for workflow in workflows]
 
 
 @router.post(
     "/",
-    dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(1, Duration.SECOND * 10))))],
+    dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(1, Duration.SECOND * 5))))],
 )
 async def create_workflow(
     body: CreateWorkflowRequest,
     request: Request,
+    auth: AuthContext = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     """Create a new workflow and start the Temporal extraction."""
-    workflow = Workflow(status=WorkflowStatus.PROCESSING, url=body.url, user_id="123")
+    workflow = Workflow(
+        status=WorkflowStatus.PROCESSING,
+        url=body.url,
+        user_id=auth.sub,
+        tenant_id=auth.tenant_id,
+    )
     try:
         session.add(workflow)
         session.commit()
@@ -95,17 +133,22 @@ async def create_workflow(
 )
 async def read_workflow(
     workflow_id: str,
+    auth: AuthContext = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     """Get a single workflow by its public ID."""
+    verify_workflow_access(auth, workflow_id)
+
     try:
         workflow = session.exec(
             select(Workflow).where(Workflow.public_id == workflow_id)
         ).one()
-        return workflow.to_dict()
     except SQLAlchemyError as e:
         print("Error(read_workflow)", e)
         raise HTTPException(status_code=404, detail="Workflow not found")
+
+    verify_tenant_owns_workflow(auth, workflow)
+    return workflow.to_dict()
 
 
 async def workflow_event(request: Request, workflow_id: str):
@@ -132,8 +175,23 @@ async def workflow_event(request: Request, workflow_id: str):
 
 
 @router.get("/{workflow_id}/stream")
-async def stream_workflow(request: Request, workflow_id: str):
-    """Stream workflow status updates via SSE."""
+async def stream_workflow(
+    request: Request,
+    workflow_id: str,
+    token: str,
+):
+    """Stream workflow status updates via SSE.
+
+    Auth is via the `?token=` query parameter (required), since
+    browser EventSource cannot set custom headers.
+    """
+    from app.dependencies import get_tenant_registry
+
+    registry = get_tenant_registry(request)
+    auth = decode_access_token(token, registry)
+
+    verify_workflow_access(auth, workflow_id)
+
     return StreamingResponse(
         workflow_event(request, workflow_id), media_type="text/event-stream"
     )

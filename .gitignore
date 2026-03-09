@@ -74,3 +74,4 @@ dmypy.txt
 
 # Keys
 *.pem
+tenants.json

@@ -1,36 +1,80 @@
-"""JWT authentication utilities for RS256 token verification."""
+"""JWT authentication utilities for multi-tenant RS256 token verification."""
+
+from dataclasses import dataclass
 
 import jwt
 from fastapi import HTTPException, status
 
 from .config import get_settings
+from .tenants import TenantRegistry
 
 
-def decode_access_token(token: str) -> dict:
-    """Decode and verify an RS256-signed JWT using the public key.
+@dataclass(frozen=True)
+class AuthContext:
+    """Authenticated request context."""
+
+    tenant_id: str
+    sub: str
+    workflow_id: str | None = None
+
+
+def decode_access_token(token: str, tenant_registry: TenantRegistry) -> AuthContext:
+    """Decode and verify a tenant-scoped RS256 JWT.
+
+    The token's `iss` claim is used to identify the tenant. The
+    corresponding public key is looked up from the tenant registry
+    and used to verify the signature.
 
     Args:
         token: The encoded JWT string.
+        tenant_registry: Registry to look up tenant public keys.
 
     Returns:
-        The decoded token payload.
+        An AuthContext with tenant_id, sub, and optional workflow_id.
 
     Raises:
-        HTTPException: If the token is expired, invalid, or cannot be decoded.
+        HTTPException: If the token is expired, invalid, the issuer
+            is missing, or the tenant is unknown.
     """
     settings = get_settings()
 
-    if not settings.jwt_public_key:
+    # Decode without verification to read the issuer claim
+    try:
+        unverified = jwt.decode(
+            token,
+            options={"verify_signature": False},
+            algorithms=[settings.jwt_algorithm],
+        )
+    except jwt.InvalidTokenError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JWT_PUBLIC_KEY is not configured",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
+    tenant_id = unverified.get("iss")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing 'iss' claim",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    tenant = tenant_registry.get_tenant(tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Unknown tenant: {tenant_id}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Verify the token with the tenant's public key
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_public_key,
+            tenant.public_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=tenant_id,
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -45,4 +89,8 @@ def decode_access_token(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return payload
+    return AuthContext(
+        tenant_id=tenant_id,
+        sub=payload.get("sub", ""),
+        workflow_id=payload.get("workflow_id"),
+    )
