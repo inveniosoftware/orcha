@@ -1,7 +1,6 @@
 """PyMuPDF-based PDF extractor."""
 
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .base import BaseExtractor
@@ -60,7 +59,11 @@ class PymupdfExtractor(BaseExtractor):
             "full_text": markdown,
             "hyperlinks": hyperlinks,
             "page_count": page_count,
-            "pages_extracted": len(resolved_pages) if resolved_pages else page_count,
+            "pages_extracted": (
+                [i + 1 for i in page_indices]
+                if resolved_pages
+                else list(range(1, page_count + 1))
+            ),
             "_pdf_metadata": pdf_meta,
         }
 
@@ -83,17 +86,3 @@ class PymupdfExtractor(BaseExtractor):
             if n.strip()
         ]
 
-    def extract_xmp(pdf_path: Path) -> dict:
-        """Extract XMP/Dublin Core metadata using pypdf."""
-        from pypdf import PdfReader
-
-        reader = PdfReader(pdf_path)
-        xmp = reader.xmp_metadata
-        if not xmp:
-            return {}
-        return {
-            "dc_title": getattr(xmp, "dc_title", None),
-            "dc_creator": getattr(xmp, "dc_creator", None),
-            "dc_description": getattr(xmp, "dc_description", None),
-            "dc_identifier": getattr(xmp, "dc_identifier", None),
-        }

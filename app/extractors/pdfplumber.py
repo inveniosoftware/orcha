@@ -30,7 +30,7 @@ class PdfplumberExtractor(BaseExtractor):
             for page_num in page_indices:
                 page = pdf.pages[page_num]
                 # Extract text with x_tolerance=2 to better detect word boundaries
-                # Default x_tolerance=3 merges words like "PhilipBull" that have small gaps
+                # Default x_tolerance=3 merges words like "PhilipBull" that have gaps
                 text = page.extract_text(x_tolerance=2) or ""
                 full_text_parts.append(text)
 
@@ -85,7 +85,11 @@ class PdfplumberExtractor(BaseExtractor):
             "hyperlinks": hyperlinks,
             "tables": tables,
             "page_count": page_count,
-            "pages_extracted": len(page_indices) if resolved_pages else page_count,
+            "pages_extracted": (
+                [i + 1 for i in page_indices]
+                if resolved_pages
+                else list(range(1, page_count + 1))
+            ),
         }
 
     def _extract_orcid_id(self, url: str) -> str | None:

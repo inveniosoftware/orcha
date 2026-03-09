@@ -30,9 +30,6 @@ class DocumentMetadata(BaseModel):
     keywords: list[str] | None = Field(
         default=None, description="Key topics or keywords from the document"
     )
-    num_pages: int | None = Field(
-        default=None, description="Number of pages in the document"
-    )
 
 
 METADATA_INSTRUCTIONS = """\
@@ -46,7 +43,6 @@ Given the raw text content of a PDF document, extract the following metadata fie
 - abstract: The abstract or summary, extracted verbatim from the document.
 - language: The language the document is written in (ISO 639-1 code, e.g. "en").
 - keywords: Key topics or keywords mentioned in the document.
-- num_pages: The number of pages (this will be provided to you).
 
 IMPORTANT RULES:
 1. Only include information explicitly stated in the document.
@@ -79,6 +75,15 @@ class ExtractMetadata(PydanticAIWorkflow):
 
     @workflow.run
     async def run(self, request_data: dict) -> DocumentMetadata:
+        """Execute the metadata extraction workflow.
+
+        Args:
+            request_data: Dictionary containing PDF extraction parameters
+                (url, extractor, pages).
+
+        Returns:
+            DocumentMetadata: Extracted metadata from the PDF document.
+        """
         content = await workflow.execute_activity(
             extract_pdf_content.create,
             extract_pdf_content.ExtractPdfContentRequest(**request_data),

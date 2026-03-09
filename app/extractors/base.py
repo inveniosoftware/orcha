@@ -22,8 +22,7 @@ class BaseExtractor(ABC):
         Returns:
             Dictionary containing extracted content. Must include:
             - full_text: Extracted text content
-            - page_count: Total number of pages in the PDF
-            - pages_extracted: Number of pages that were actually extracted
+            - pages_extracted: List of page numbers actually extracted (1-indexed)
 
         """
         pass

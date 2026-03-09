@@ -14,12 +14,11 @@ class ExtractPdfContentRequest(BaseModel):
 
 
 class ExtractPdfContentResponse(BaseModel):
-    """Response containing extracted PDF text and page count."""
+    """Response containing extracted PDF text and page numbers."""
 
     text: str
-    num_pages: int
-    extractor_used: str
-    pages_extracted: int
+    extractor: str
+    pages_extracted: list[int]  # List of 1-indexed page numbers that were extracted
 
 
 @activity.defn
@@ -36,7 +35,6 @@ async def create(request: ExtractPdfContentRequest) -> ExtractPdfContentResponse
 
     return ExtractPdfContentResponse(
         text=result["full_text"],
-        num_pages=result["page_count"],
         pages_extracted=result["pages_extracted"],
-        extractor_used=request.extractor,
+        extractor=request.extractor,
     )
