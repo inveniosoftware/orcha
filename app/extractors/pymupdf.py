@@ -22,7 +22,6 @@ class PymupdfExtractor(BaseExtractor):
         import pymupdf
         import pymupdf4llm
 
-
         # Open PDF from bytes using PyMuPDF's stream interface
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         page_count = len(doc)
@@ -85,4 +84,3 @@ class PymupdfExtractor(BaseExtractor):
             for n in names
             if n.strip()
         ]
-
