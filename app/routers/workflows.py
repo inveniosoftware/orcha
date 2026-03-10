@@ -4,9 +4,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from fastapi_limiter.depends import RateLimiter
 from pydantic import BaseModel
-from pyrate_limiter import Duration, Limiter, Rate
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from temporalio.client import Client
@@ -61,9 +59,6 @@ def verify_tenant_owns_workflow(auth: AuthContext, workflow: Workflow) -> None:
 
 @router.get(
     "/",
-    dependencies=[
-        Depends(RateLimiter(limiter=Limiter(Rate(10, Duration.SECOND * 30))))
-    ],
 )
 async def read_workflows(
     auth: AuthContext = Depends(get_current_user),
@@ -78,7 +73,6 @@ async def read_workflows(
 
 @router.post(
     "/",
-    dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(1, Duration.SECOND * 5))))],
 )
 async def create_workflow(
     body: CreateWorkflowRequest,
@@ -126,9 +120,6 @@ async def create_workflow(
 
 @router.get(
     "/{workflow_id}",
-    dependencies=[
-        Depends(RateLimiter(limiter=Limiter(Rate(10, Duration.SECOND * 30))))
-    ],
 )
 async def read_workflow(
     workflow_id: str,
@@ -178,18 +169,36 @@ async def stream_workflow(
     request: Request,
     workflow_id: str,
     token: str,
+    session: Session = Depends(get_session),
 ):
     """Stream workflow status updates via SSE.
 
     Auth is via the `?token=` query parameter (required), since
     browser EventSource cannot set custom headers.
     """
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing token query parameter",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     from app.dependencies import get_tenant_registry
 
     registry = get_tenant_registry(request)
     auth = decode_access_token(token, registry)
 
     verify_workflow_access(auth, workflow_id)
+
+    # Verify tenant owns the workflow before streaming
+    try:
+        workflow = session.exec(
+            select(Workflow).where(Workflow.public_id == workflow_id)
+        ).one()
+    except SQLAlchemyError:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    verify_tenant_owns_workflow(auth, workflow)
 
     return StreamingResponse(
         workflow_event(request, workflow_id), media_type="text/event-stream"
