@@ -41,9 +41,9 @@ uv run airdec run workers    # Temporal worker
 
 ## Authentication
 
-The API uses **multi-tenant RS256 (asymmetric) JWT authentication**. Each tenant has its own RSA key pair. The tenant signs tokens with their private key; the server verifies them using the tenant's registered public key.
+The API uses **multi-tenant RS256 (asymmetric) JWT authentication**. Each tenant has its own RSA key pair(s). The tenant signs tokens with their private key; the server verifies them using the tenant's registered public key.
 
-Tenants are identified by the `iss` (issuer) claim in the JWT.
+Tenants are identified by the `iss` (issuer) claim in the JWT. To support zero-downtime key rotation, the server allows multiple public keys per tenant. In token headers, tenants must include a Key ID (`kid`) that matches one of their defined keys in the configuration.
 
 ### Tenant Configuration
 
@@ -53,11 +53,15 @@ Create a `tenants.json` file at the project root:
 {
   "tenant-a": {
     "name": "Tenant A",
-    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+    "public_keys": {
+      "kid-1": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+    }
   },
   "tenant-b": {
     "name": "Tenant B",
-    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+    "public_keys": {
+      "kid-1": "-----BEGIN PUBLIC KEY-----\nMIIBI...\n-----END PUBLIC KEY-----"
+    }
   }
 }
 ```
@@ -111,6 +115,7 @@ token = jwt.encode(
     },
     private_key,
     algorithm="RS256",
+    headers={"kid": "kid-1"}                                  # Required: must match kid in tenants.json public_keys
 )
 print(token)
 ```

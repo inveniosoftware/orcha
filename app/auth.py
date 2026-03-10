@@ -38,6 +38,23 @@ def decode_access_token(token: str, tenant_registry: TenantRegistry) -> AuthCont
     """
     settings = get_settings()
 
+    # Extract kid from unverified header
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        if not kid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token header missing 'kid'",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Decode without verification to read the issuer claim
     try:
         unverified = jwt.decode(
@@ -68,11 +85,20 @@ def decode_access_token(token: str, tenant_registry: TenantRegistry) -> AuthCont
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Verify the token with the tenant's public key
+    # Select the correct public key using the kid
+    public_key = tenant.public_keys.get(kid)
+    if not public_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Unknown key ID '{kid}' for tenant: {tenant_id}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Verify the token with the specific public key
     try:
         payload = jwt.decode(
             token,
-            tenant.public_key,
+            public_key,
             algorithms=[settings.jwt_algorithm],
             issuer=tenant_id,
         )

@@ -12,7 +12,7 @@ class TenantConfig:
 
     tenant_id: str
     name: str
-    public_key: str
+    public_keys: dict[str, str]
 
 
 # TODO: Integrate this, not being used as of now, but good to have for future
@@ -31,7 +31,9 @@ class TenantRegistry:
     {
         "tenant-id": {
             "name": "Human-readable Name",
-            "public_key": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"
+            "public_keys": {
+                "kid-1": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+            }
         }
     }
     """
@@ -66,12 +68,15 @@ class TenantRegistry:
         tenants: dict[str, TenantConfig] = {}
 
         for tenant_id, config in raw.items():
-            if "public_key" not in config:
-                raise ValueError(f"Tenant '{tenant_id}' is missing 'public_key'")
+            public_keys = config.get("public_keys", {})
+
+            if not public_keys:
+                raise ValueError(f"Tenant '{tenant_id}' is missing 'public_keys'")
+
             tenants[tenant_id] = TenantConfig(
                 tenant_id=tenant_id,
                 name=config.get("name", tenant_id),
-                public_key=config["public_key"],
+                public_keys=public_keys,
             )
 
         return cls(tenants)
