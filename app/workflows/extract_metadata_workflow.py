@@ -6,7 +6,9 @@ from pydantic_ai.durable_exec.temporal import (
 )
 from temporalio import workflow
 
-from app.activities import extract_pdf_content
+from app.activities import extract_metadata, extract_pdf_content
+from app.activities.extract_metadata import ExtractMetadataRequest
+from app.activities.extract_pdf_content import ExtractPdfContentRequest
 
 
 class DocumentMetadata(BaseModel):
@@ -71,8 +73,6 @@ IMPORTANT RULES:
 class ExtractMetadata(PydanticAIWorkflow):
     """Workflow that extracts content from a PDF and uses an LLM to extract metadata."""
 
-    # __pydantic_ai_agents__ = [temporal_metadata_agent]
-
     @workflow.run
     async def run(self, request_data: dict) -> DocumentMetadata:
         """Execute the metadata extraction workflow.
@@ -84,19 +84,18 @@ class ExtractMetadata(PydanticAIWorkflow):
         Returns:
             DocumentMetadata: Extracted metadata from the PDF document.
         """
+        # Activity 1: Extract PDF text
         content = await workflow.execute_activity(
-            extract_pdf_content.create,
-            extract_pdf_content.ExtractPdfContentRequest(**request_data),
+            extract_pdf_content,
+            ExtractPdfContentRequest(**request_data),
             start_to_close_timeout=timedelta(minutes=5),
         )
 
-        # prompt = (
-        #     f"The following is the text content extracted from a PDF document "
-        #     f"({content.num_pages} pages).\n\n"
-        #     f"---\n{content.text}\n---\n\n"
-        #     f"Please extract the structured metadata from this document."
-        # )
+        # Activity 2: Extract metadata using LLM
+        metadata = await workflow.execute_activity(
+            extract_metadata,
+            ExtractMetadataRequest(text=content.text),
+            start_to_close_timeout=timedelta(minutes=5),
+        )
 
-        # result = await temporal_metadata_agent.run(prompt)
-        # return result.output
-        return content
+        return metadata
