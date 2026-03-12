@@ -22,6 +22,5 @@ def get_extractor(extractor: str = "pdfplumber"):
         return PymupdfExtractor()
     else:
         raise ValueError(
-            f"Unknown extractor: {extractor}. "
-            f"Supported extractors: pdfplumber, pymupdf"
+            f"Unknown extractor: {extractor}. Supported extractors: pdfplumber, pymupdf"
         )

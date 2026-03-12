@@ -66,5 +66,3 @@ class PymupdfExtractor(BaseExtractor):
                 "pdf_metadata": pdf_meta,
             },
         }
-
-
