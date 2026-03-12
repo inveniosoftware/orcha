@@ -13,6 +13,9 @@ class DocumentMetadata(BaseModel):
     """Metadata extracted from a document."""
     title: str = Field(description="Main title of the document")
     abstract: str | None = Field(default=None, description="Document abstract")
+    authors: list[str] = Field(
+        default_factory=list, description="List of document authors"
+    )
 
 
 class ExtractMetadataRequest(BaseModel):
@@ -23,7 +26,8 @@ class ExtractMetadataRequest(BaseModel):
 
 INSTRUCTIONS = """\
 Extract structured metadata from this document text.
-Focus on finding the title and the abstract/summary.
+Focus on finding the title, abstract/summary, and authors.
+For authors, extract individual names as separate list items.
 Only include information that is clearly stated in the text.
 """
 
