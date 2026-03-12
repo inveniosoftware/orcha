@@ -1,4 +1,4 @@
-"""Shared test fixtures for the AIRDEC test suite."""
+"""Shared test fixtures for the Orcha test suite."""
 
 import pytest
 from sqlalchemy import StaticPool, create_engine

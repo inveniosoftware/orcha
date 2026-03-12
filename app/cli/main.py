@@ -11,7 +11,7 @@ from app.database.session import get_engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-app = typer.Typer(help="AIRDEC CLI tools.")
+app = typer.Typer(help="Orcha CLI tools.")
 services_app = typer.Typer(
     help="Manage infrastructure services (PostgreSQL + Temporal)."
 )

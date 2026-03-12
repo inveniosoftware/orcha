@@ -1,4 +1,4 @@
-"""Database models for the AIRDEC workflow system."""
+"""Database models for the Orcha workflow system."""
 
 from enum import Enum
 

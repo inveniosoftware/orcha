@@ -1,6 +1,6 @@
-# AIRDEC Workflows [Temporary]
+# Orcha Workflows
 
-Backend service for AIRDEC AI extraction, built with **FastAPI**, **Temporal**, and **PostgreSQL**.
+Backend service for Orcha AI extraction, built with **FastAPI**, **Temporal**, and **PostgreSQL**.
 
 ## Prerequisites
 
@@ -19,24 +19,24 @@ uv sync
 ### 2. Start infrastructure (PostgreSQL + Temporal)
 
 ```bash
-uv run airdec services start
+uv run orcha services start
 ```
 
 ### 3. Create database tables
 
 ```bash
-uv run airdec init-db
+uv run orcha init-db
 ```
 
 ### 4. Start the application
 
 ```bash
 # Start both server and worker
-uv run airdec run
+uv run orcha run
 
 # Or start them individually
-uv run airdec run server     # FastAPI dev server
-uv run airdec run workers    # Temporal worker
+uv run orcha run server     # FastAPI dev server
+uv run orcha run workers    # Temporal worker
 ```
 
 ## Authentication
@@ -127,14 +127,14 @@ curl -H "Authorization: Bearer <token>" http://localhost:8000/workflows/<YOUR_WO
 
 ## CLI Reference
 
-| Command                      | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `airdec services start`     | Start PostgreSQL + Temporal via Docker   |
-| `airdec services stop`      | Stop all Docker services                 |
-| `airdec init-db`            | Create database tables from models       |
-| `airdec run`                | Start both server and worker             |
-| `airdec run server`         | Start FastAPI dev server only            |
-| `airdec run workers`        | Start Temporal worker only               |
+| Command                | Description                              |
+|------------------------| ---------------------------------------- |
+| `orcha services start` | Start PostgreSQL + Temporal via Docker   |
+| `orcha services stop`  | Stop all Docker services                 |
+| `orcha init-db`        | Create database tables from models       |
+| `orcha run`            | Start both server and worker             |
+| `orcha run server`     | Start FastAPI dev server only            |
+| `orcha run workers`    | Start Temporal worker only               |
 
 ## Useful Commands
 

@@ -51,4 +51,4 @@ app.include_router(workflows.router)
 @app.get("/")
 async def root(auth=Depends(get_current_user)):
     """Health check endpoint."""
-    return {"message": "This is the backend service for AIRDEC!"}
+    return {"message": "This is the backend service for Orcha!"}

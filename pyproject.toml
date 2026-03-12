@@ -1,7 +1,7 @@
 [project]
-name = "airdec-backend"
+name = "orcha-backend"
 version = "0.1.0"
-description = "backend for airdec ai extraction"
+description = "backend for orcha ai extraction"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.scripts]
-airdec = "app.cli.main:app"
+orcha = "app.cli.main:app"
 
 [build-system]
 requires = ["hatchling"]

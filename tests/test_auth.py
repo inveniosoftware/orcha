@@ -123,7 +123,7 @@ def test_auth_valid_token_returns_200(client):
     token = generate_test_token()
     response = client.get("/", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
-    assert response.json() == {"message": "This is the backend service for AIRDEC!"}
+    assert response.json() == {"message": "This is the backend service for Orcha!"}
 
 
 def test_auth_expired_token_returns_401(client):

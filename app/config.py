@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     pgpassword: str = "postgres"
     pghost: str = "localhost"
     pgport: str = "5433"
-    pgdatabase: str = "airdec"
+    pgdatabase: str = "orcha"
 
     # Temporal
     temporal_host: str = "localhost:7233"
