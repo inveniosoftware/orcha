@@ -1,6 +1,6 @@
 """Activities for the airdec-workflows application."""
 
-from .extract_metadata import extract_metadata
-from .extract_pdf_content import create as extract_pdf_content
+from .extract_metadata import metadata_extraction
+from .extract_pdf_content import text_extraction
 
-__all__ = ["extract_pdf_content", "extract_metadata"]
+__all__ = ["text_extraction", "metadata_extraction"]

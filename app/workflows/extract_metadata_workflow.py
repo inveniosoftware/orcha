@@ -6,9 +6,8 @@ from pydantic_ai.durable_exec.temporal import (
 )
 from temporalio import workflow
 
-from app.activities import extract_metadata, extract_pdf_content
-from app.activities.extract_metadata import ExtractMetadataRequest
-from app.activities.extract_pdf_content import ExtractPdfContentRequest
+from app.activities.extract_metadata import ExtractMetadataRequest, metadata_extraction
+from app.activities.extract_pdf_content import ExtractPdfContentRequest, text_extraction
 
 
 class DocumentMetadata(BaseModel):
@@ -86,14 +85,14 @@ class ExtractMetadata(PydanticAIWorkflow):
         """
         # Activity 1: Extract PDF text
         content = await workflow.execute_activity(
-            extract_pdf_content,
+            text_extraction,
             ExtractPdfContentRequest(**request_data),
             start_to_close_timeout=timedelta(minutes=5),
         )
 
         # Activity 2: Extract metadata using LLM
         metadata = await workflow.execute_activity(
-            extract_metadata,
+            metadata_extraction,
             ExtractMetadataRequest(text=content.text),
             start_to_close_timeout=timedelta(minutes=5),
         )

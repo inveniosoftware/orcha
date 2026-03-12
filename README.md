@@ -125,6 +125,25 @@ Use the token:
 curl -H "Authorization: Bearer <token>" http://localhost:8000/workflows/<YOUR_WORKFLOW_ID>
 ```
 
+### LLM Configuration
+
+The service uses **LiteLLM** for LLM-powered metadata extraction from PDF documents. You need to configure an API key for the LLM service.
+
+
+Set the LiteLLM API key as an environment variable:
+
+```bash
+export LITELLM_API_KEY="<api-key>"
+```
+
+Or add it to your shell profile (`.bashrc`, `.zshrc`, etc.) for persistence:
+
+```bash
+echo 'export LITELLM_API_KEY="<api-key>"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+
 ## CLI Reference
 
 | Command                | Description                              |

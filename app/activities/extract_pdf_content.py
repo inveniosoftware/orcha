@@ -23,7 +23,9 @@ class ExtractPdfContentResponse(BaseModel):
 
 
 @activity.defn
-async def create(request: ExtractPdfContentRequest) -> ExtractPdfContentResponse:
+async def text_extraction(
+    request: ExtractPdfContentRequest,
+) -> ExtractPdfContentResponse:
     """Download PDF from a URL and extract its content using the specified extractor."""
     async with httpx.AsyncClient() as client:
         response = await client.get(request.url)

@@ -44,7 +44,7 @@ def _create_model(model_name: str):
 
 
 @activity.defn
-async def extract_metadata(request: ExtractMetadataRequest) -> DocumentMetadata:
+async def metadata_extraction(request: ExtractMetadataRequest) -> DocumentMetadata:
     """Extract metadata using LLM."""
     model = _create_model(request.model)
     agent = Agent(
