@@ -24,8 +24,8 @@ async def main():
             ExtractMetadata,
         ],
         activities=[
-            text_extraction, # Activity for extraction all text from the PDF
-            metadata_extraction # Activity for extraction metadata from PDF text
+            text_extraction,  # Activity for extraction all text from the PDF
+            metadata_extraction,  # Activity for extraction metadata from PDF text
         ],
     )
     await worker.run()

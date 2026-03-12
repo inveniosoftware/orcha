@@ -11,6 +11,7 @@ from temporalio import activity
 
 class DocumentMetadata(BaseModel):
     """Metadata extracted from a document."""
+
     title: str = Field(description="Main title of the document")
     abstract: str | None = Field(default=None, description="Document abstract")
     authors: list[str] = Field(
@@ -20,6 +21,7 @@ class DocumentMetadata(BaseModel):
 
 class ExtractMetadataRequest(BaseModel):
     """Request to extract metadata from document text."""
+
     text: str = Field(description="Document text to analyze")
     model: str = Field(default="groq/qwen/qwen3-32b", description="Model to use")
 
