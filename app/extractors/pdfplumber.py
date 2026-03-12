@@ -82,14 +82,16 @@ class PdfplumberExtractor(BaseExtractor):
 
         return {
             "full_text": full_text,
-            "hyperlinks": hyperlinks,
-            "tables": tables,
             "page_count": page_count,
             "pages_extracted": (
                 [i + 1 for i in page_indices]
                 if resolved_pages
                 else list(range(1, page_count + 1))
             ),
+            "extra": {
+                "hyperlinks": hyperlinks,
+                "tables": tables,
+            },
         }
 
     def _extract_orcid_id(self, url: str) -> str | None:

@@ -20,9 +20,12 @@ class BaseExtractor(ABC):
                    Example: [1, 2, 3, -2, -1] = first 3 + last 2 pages.
 
         Returns:
-            Dictionary containing extracted content. Must include:
+            Dictionary containing extracted content:
+            Required keys:
             - full_text: Extracted text content
+            - page_count: Total number of pages in the document
             - pages_extracted: List of page numbers actually extracted (1-indexed)
+            - extra: Dict containing tool-specific extraction data
 
         """
         pass

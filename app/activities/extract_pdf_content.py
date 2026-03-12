@@ -1,6 +1,7 @@
 import httpx
 from pydantic import BaseModel
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from app.extractors import get_extractor
 
@@ -30,7 +31,17 @@ async def create(request: ExtractPdfContentRequest) -> ExtractPdfContentResponse
         pdf_bytes = response.content
 
     # Extract content using the extraction module
-    extractor = get_extractor(request.extractor)
+    try:
+        extractor = get_extractor(request.extractor)
+    except ValueError as e:
+        # Convert ValueError to non-retryable ApplicationError for proper
+        # Temporal error handling
+        raise ApplicationError(
+            str(e),
+            type="InvalidExtractor",
+            non_retryable=True,
+        ) from e
+
     result = extractor.extract(pdf_bytes, request.pages)
 
     return ExtractPdfContentResponse(

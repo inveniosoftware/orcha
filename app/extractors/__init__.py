@@ -12,8 +12,16 @@ def get_extractor(extractor: str = "pdfplumber"):
 
     Returns:
         Extractor instance
+
+    Raises:
+        ValueError: If unknown extractor type is specified
     """
-    if extractor == "pymupdf":
-        return PymupdfExtractor()
-    else:  # default to pdfplumber
+    if extractor == "pdfplumber":
         return PdfplumberExtractor()
+    elif extractor == "pymupdf":
+        return PymupdfExtractor()
+    else:
+        raise ValueError(
+            f"Unknown extractor: {extractor}. "
+            f"Supported extractors: pdfplumber, pymupdf"
+        )

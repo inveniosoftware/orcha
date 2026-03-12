@@ -1,6 +1,5 @@
 """PyMuPDF-based PDF extractor."""
 
-import re
 from typing import Any, Dict, List, Optional
 
 from .base import BaseExtractor
@@ -56,31 +55,16 @@ class PymupdfExtractor(BaseExtractor):
 
         return {
             "full_text": markdown,
-            "hyperlinks": hyperlinks,
             "page_count": page_count,
             "pages_extracted": (
                 [i + 1 for i in page_indices]
                 if resolved_pages
                 else list(range(1, page_count + 1))
             ),
-            "_pdf_metadata": pdf_meta,
+            "extra": {
+                "hyperlinks": hyperlinks,
+                "pdf_metadata": pdf_meta,
+            },
         }
 
-    def _parse_keywords(keywords_str: str) -> list[str]:
-        """Parse keywords from PDF metadata string."""
-        if not keywords_str:
-            return []
-        # Common separators: comma, semicolon
-        return [k.strip() for k in re.split(r"[,;]", keywords_str) if k.strip()]
 
-    def _parse_authors(author_str: str) -> list[dict]:
-        """Parse author string into structured list."""
-        if not author_str:
-            return []
-        # PDF author field is usually a simple string or comma/semicolon separated
-        names = re.split(r"[,;]", author_str)
-        return [
-            {"name": n.strip(), "affiliation": "", "orcid": ""}
-            for n in names
-            if n.strip()
-        ]
