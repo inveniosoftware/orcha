@@ -1,58 +1,77 @@
-"""Simple LLM-based metadata extraction activity."""
-
-import os
+"""LLM-based metadata suggestions activity."""
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.litellm import LiteLLMProvider
+from pydantic_ai.providers.ollama import OllamaProvider
 from temporalio import activity
 
+from app.config import get_settings
+from app.workflows.suggestions import MetadataResult
 
-class DocumentMetadata(BaseModel):
-    """Metadata extracted from a document."""
 
-    title: str = Field(description="Main title of the document")
-    abstract: str | None = Field(default=None, description="Document abstract")
-    authors: list[str] = Field(
-        default_factory=list, description="List of document authors"
-    )
+def _parse_llm(llm: str) -> tuple[str, str]:
+    provider, sep, model_name = llm.partition("/")
+    if not sep:
+        raise ValueError("Invalid LLM; expected '<provider>/<model>'")
+    provider = provider.strip().lower()
+    model_name = model_name.strip()
+    if provider not in {"litellm", "ollama"}:
+        raise ValueError("Invalid LLM; provider must be 'litellm' or 'ollama'")
+    if not model_name:
+        raise ValueError("Invalid LLM; model name is missing")
+    return provider, model_name
 
 
 class ExtractMetadataRequest(BaseModel):
-    """Request to extract metadata from document text."""
+    """Request to generate metadata suggestions from document text."""
 
     text: str = Field(description="Document text to analyze")
-    model: str = Field(default="groq/qwen/qwen3-32b", description="Model to use")
 
 
 INSTRUCTIONS = """\
-Extract structured metadata from this document text.
-Focus on finding the title, abstract/summary, and authors.
-For authors, extract individual names as separate list items.
-Only include information that is clearly stated in the text.
+You generate metadata suggestions from document text.
+
+Return a list of typed suggestions for the following fields:
+- title (string)
+- description (string; the abstract/summary)
+- creators (list of objects with: name, affiliation (optional), orcid (optional))
+
+Rules:
+- Only include information that is clearly stated in the text.
+- If a field is not present or cannot be determined, omit that suggestion entirely.
+- For creators.name, use the "Family, Given" format.
 """
 
 
-def _create_model(model_name: str):
-    """Create a model using LiteLLM provider."""
-    return OpenAIChatModel(
-        model_name=model_name,
-        provider=LiteLLMProvider(
-            api_base="https://llmgw-litellm.web.cern.ch/v1",
-            api_key=os.environ["LITELLM_API_KEY"],
-        ),
-    )
+def _create_model() -> OpenAIChatModel:
+    """Create an OpenAI-compatible chat model from settings."""
+    settings = get_settings()
+    provider_name, model_name = _parse_llm(settings.llm)
+
+    if provider_name == "ollama":
+        provider = OllamaProvider(
+            base_url=settings.ollama_base_url,
+            api_key=settings.ollama_api_key,
+        )
+    else:
+        provider = LiteLLMProvider(
+            api_base=settings.litellm_api_base,
+            api_key=settings.litellm_api_key,
+        )
+
+    return OpenAIChatModel(model_name=model_name, provider=provider)
 
 
 @activity.defn
-async def metadata_extraction(request: ExtractMetadataRequest) -> DocumentMetadata:
-    """Extract metadata using LLM."""
-    model = _create_model(request.model)
+async def metadata_extraction(request: ExtractMetadataRequest) -> MetadataResult:
+    """Generate typed metadata suggestions using an LLM."""
+    model = _create_model()
     agent = Agent(
         model=model,
         instructions=INSTRUCTIONS,
-        output_type=DocumentMetadata,
+        output_type=MetadataResult,
     )
 
     result = await agent.run(request.text)

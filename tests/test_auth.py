@@ -503,3 +503,26 @@ def test_list_workflows_tenant_isolation(client, db_session):
     assert len(workflows) == 1
     assert workflows[0]["tenant_id"] == "tenant-b"
     assert workflows[0]["public_id"] == wf_b.public_id
+
+
+def test_read_workflow_includes_result(client, db_session):
+    """GET /workflows/{id} includes `result.suggestions` when present."""
+    wf = Workflow(
+        status=WorkflowStatus.SUCCESS,
+        url="https://example.com/test.pdf",
+        tenant_id="tenant-a",
+        result={"suggestions": [{"field": "title", "value": "My Title"}]},
+    )
+    db_session.add(wf)
+    db_session.commit()
+    db_session.refresh(wf)
+
+    token = generate_test_token()
+    response = client.get(
+        f"/workflows/{wf.public_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "result" in payload
+    assert payload["result"]["suggestions"][0]["field"] == "title"

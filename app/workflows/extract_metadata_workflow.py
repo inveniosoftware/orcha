@@ -8,64 +8,22 @@ from temporalio import workflow
 
 from app.activities.extract_metadata import ExtractMetadataRequest, metadata_extraction
 from app.activities.extract_pdf_content import ExtractPdfContentRequest, text_extraction
+from app.activities.store_workflow_result import (
+    StoreWorkflowResultRequest,
+    store_workflow_result,
+)
+from app.database.models import WorkflowStatus
+from app.workflows.suggestions import MetadataResult
 
 
-class DocumentMetadata(BaseModel):
-    """Structured metadata extracted from a PDF document."""
+class ExtractMetadataWorkflowRequest(BaseModel):
+    """Workflow request to extract PDF content and generate metadata suggestions."""
 
-    title: str | None = Field(default=None, description="The title of the document")
-    authors: list[str] | None = Field(
-        default=None, description="List of document authors"
-    )
-    publication_date: str | None = Field(
-        default=None,
-        description="Publication date in ISO format (YYYY-MM-DD, YYYY-MM, or YYYY)",
-    )
-    abstract: str | None = Field(
-        default=None,
-        description="Abstract or summary of the document, extracted verbatim",
-    )
-    language: str | None = Field(
-        default=None, description="Language of the document (e.g. 'en', 'fr')"
-    )
-    keywords: list[str] | None = Field(
-        default=None, description="Key topics or keywords from the document"
-    )
-
-
-METADATA_INSTRUCTIONS = """\
-You are an expert at extracting structured metadata from documents.
-
-Given the raw text content of a PDF document, extract the following metadata fields:
-- title: The main title of the document.
-- authors: A list of authors. Look for names near the title,
-  in headers, or in an authors section.
-- publication_date: The publication date in ISO format (YYYY-MM-DD, YYYY-MM, or YYYY).
-- abstract: The abstract or summary, extracted verbatim from the document.
-- language: The language the document is written in (ISO 639-1 code, e.g. "en").
-- keywords: Key topics or keywords mentioned in the document.
-
-IMPORTANT RULES:
-1. Only include information explicitly stated in the document.
-2. If a field is not present or cannot be determined, leave it as null.
-3. For the abstract, include the text verbatim from the document.
-4. Do not fabricate or infer information that is not in the text.
-"""
-
-# metadata_agent = Agent(
-#     "openai:gpt-4o-mini",
-#     instructions=METADATA_INSTRUCTIONS,
-#     output_type=DocumentMetadata,
-#     name="metadata_extractor",
-# )
-#
-# temporal_metadata_agent = TemporalAgent(
-#     metadata_agent,
-#     model_activity_config=workflow.ActivityConfig(
-#         start_to_close_timeout=timedelta(minutes=5),
-#     ),
-# )
-#
+    workflow_id: str = Field(description="Workflow public_id (DB primary identifier)")
+    tenant_id: str = Field(description="Tenant id (ownership check)")
+    url: str
+    extractor: str = "pdfplumber"
+    pages: list[int] | None = None
 
 
 @workflow.defn
@@ -73,28 +31,49 @@ class ExtractMetadata(PydanticAIWorkflow):
     """Workflow that extracts content from a PDF and uses an LLM to extract metadata."""
 
     @workflow.run
-    async def run(self, request_data: dict) -> DocumentMetadata:
-        """Execute the metadata extraction workflow.
+    async def run(self, request_data: dict) -> MetadataResult:
+        """Execute the extraction + suggestions workflow."""
+        request = ExtractMetadataWorkflowRequest(**request_data)
+        try:
+            # Activity 1: Extract PDF text
+            content = await workflow.execute_activity(
+                text_extraction,
+                ExtractPdfContentRequest(
+                    url=request.url,
+                    extractor=request.extractor,
+                    pages=request.pages,
+                ),
+                start_to_close_timeout=timedelta(minutes=5),
+            )
 
-        Args:
-            request_data: Dictionary containing PDF extraction parameters
-                (url, extractor, pages).
+            # Activity 2: Generate metadata suggestions using LLM
+            result = await workflow.execute_activity(
+                metadata_extraction,
+                ExtractMetadataRequest(text=content.text),
+                start_to_close_timeout=timedelta(minutes=5),
+            )
+        except Exception:
+            await workflow.execute_activity(
+                store_workflow_result,
+                StoreWorkflowResultRequest(
+                    workflow_id=request.workflow_id,
+                    tenant_id=request.tenant_id,
+                    status=WorkflowStatus.ERROR,
+                    result=None,
+                ),
+                start_to_close_timeout=timedelta(minutes=1),
+            )
+            raise
 
-        Returns:
-            DocumentMetadata: Extracted metadata from the PDF document.
-        """
-        # Activity 1: Extract PDF text
-        content = await workflow.execute_activity(
-            text_extraction,
-            ExtractPdfContentRequest(**request_data),
-            start_to_close_timeout=timedelta(minutes=5),
+        await workflow.execute_activity(
+            store_workflow_result,
+            StoreWorkflowResultRequest(
+                workflow_id=request.workflow_id,
+                tenant_id=request.tenant_id,
+                status=WorkflowStatus.SUCCESS,
+                result=result.model_dump(),
+            ),
+            start_to_close_timeout=timedelta(minutes=1),
         )
 
-        # Activity 2: Extract metadata using LLM
-        metadata = await workflow.execute_activity(
-            metadata_extraction,
-            ExtractMetadataRequest(text=content.text),
-            start_to_close_timeout=timedelta(minutes=5),
-        )
-
-        return metadata
+        return result

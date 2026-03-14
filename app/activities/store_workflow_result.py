@@ -40,4 +40,3 @@ async def store_workflow_result(request: StoreWorkflowResultRequest) -> None:
         workflow.result = request.result
         session.add(workflow)
         session.commit()
-

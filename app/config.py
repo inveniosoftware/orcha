@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # LLM
-    # TODO Currently we have only a single workflow, so single LLM configuration if fine,
-    # I guess we can parameterize it or make it configurable per workflow.
+    # TODO Currently we have only a single workflow, so single LLM configuration
+    # is fine. We can parameterize it or make it configurable per workflow later.
     llm: str = "ollama/qwen3:4b"
     litellm_api_base: str = "<litellm-endpoint>"
     litellm_api_key: str | None = None

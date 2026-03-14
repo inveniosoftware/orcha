@@ -100,12 +100,18 @@ async def create(
         client = _get_temporal_client(request)
         await client.start_workflow(
             ExtractMetadata.run,
-            args=[{"url": body.url, "extractor": body.extractor, "pages": body.pages}],
+            args=[
+                {
+                    "workflow_id": workflow_id,
+                    "tenant_id": auth.tenant_id,
+                    "url": body.url,
+                    "extractor": body.extractor,
+                    "pages": body.pages,
+                }
+            ],
             id=f"extract-metadata-{workflow_id}",
             task_queue="extract-pdf-metadata-task-queue",
         )
-        workflow.status = WorkflowStatus.SUCCESS
-        session.commit()
     except Exception as e:
         print("Error(start_temporal_workflow)", e)
         try:
@@ -117,7 +123,7 @@ async def create(
             status_code=500, detail="Could not start extraction workflow"
         )
 
-    return {"public_id": workflow_id, "status": "PROCESSING"}
+    return workflow.to_dict()
 
 
 @router.get(
