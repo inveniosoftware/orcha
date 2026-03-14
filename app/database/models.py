@@ -3,6 +3,7 @@
 from enum import Enum
 
 from nanoid import generate
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -27,6 +28,7 @@ class Workflow(SQLModel, table=True):
     url: str
     status: WorkflowStatus
     tenant_id: str
+    result: dict | None = Field(default=None, sa_column=Column(JSON))
 
     def to_dict(self):
         """Convert workflow to a dictionary representation."""
@@ -35,4 +37,5 @@ class Workflow(SQLModel, table=True):
             "status": self.status,
             "url": self.url,
             "tenant_id": self.tenant_id,
+            "result": self.result,
         }

@@ -127,20 +127,27 @@ curl -H "Authorization: Bearer <token>" http://localhost:8000/workflows/<YOUR_WO
 
 ### LLM Configuration
 
-The service uses **LiteLLM** for LLM-powered metadata extraction from PDF documents. You need to configure an API key for the LLM service.
+The service supports multiple LLM backends. Configure a single setting, `LLM`,
+in the form `<provider>/<model>`.
 
-
-Set the LiteLLM API key as an environment variable:
+#### LiteLLM (default/recommended)
 
 ```bash
+export LLM="litellm/groq/qwen/qwen3-32b"
+```
+
+Optional configuration:
+
+```bash
+export LITELLM_API_BASE="<litellm-endpoint>"
 export LITELLM_API_KEY="<api-key>"
 ```
 
-Or add it to your shell profile (`.bashrc`, `.zshrc`, etc.) for persistence:
+#### Ollama (local/dev)
 
 ```bash
-echo 'export LITELLM_API_KEY="<api-key>"' >> ~/.zshrc
-source ~/.zshrc
+export LLM="ollama/llama3.1"
+export OLLAMA_BASE_URL="http://localhost:11434/v1"
 ```
 
 
@@ -167,4 +174,3 @@ docker compose logs -f
 # Open Temporal UI
 open http://localhost:8080
 ```
-
