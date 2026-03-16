@@ -1,6 +1,7 @@
 """Workflow API routes with tenant-scoped access control."""
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -164,12 +165,23 @@ async def workflow_event(request: Request, workflow_id: str):
                     select(Workflow).where(Workflow.public_id == workflow_id)
                 ).one()
 
-                status = workflow.status.name
-                yield ServerSentEvent(data=status)
+                status = workflow.status
 
-                if status in {"ERROR", "SUCCESS"}:
-                    yield ServerSentEvent(data="{}", event="done")
-                    return
+                if status == WorkflowStatus.SUCCESS:
+                    yield ServerSentEvent(
+                        data=json.dumps(workflow.result), event="metadata"
+                    )
+                    yield ServerSentEvent(data="done", event="end")
+                    break
+
+                if status == WorkflowStatus.ERROR:
+                    yield ServerSentEvent(
+                        # TODO: improve it with a better error message for end users
+                        data="The Temporal Workflow failed",
+                        event="error",
+                    )
+                    yield ServerSentEvent(data="done", event="end")
+                    break
 
             except SQLAlchemyError as e:
                 print("Error in fetching from database (stream_workflow)", e)
@@ -177,6 +189,7 @@ async def workflow_event(request: Request, workflow_id: str):
                     data="Failed to read workflow status.",
                     event="error",
                 )
+                yield ServerSentEvent(data="done", event="end")
                 break
 
             except Exception as e:
@@ -185,6 +198,8 @@ async def workflow_event(request: Request, workflow_id: str):
                     data="An unexpected error occurred while streaming workflow results.",  # noqa: E501
                     event="error",
                 )
+                yield ServerSentEvent(data="done", event="end")
+                break
 
         await asyncio.sleep(STREAM_DELAY)
 
