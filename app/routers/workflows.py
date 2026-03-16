@@ -62,7 +62,7 @@ def verify_tenant_owns_workflow(auth: AuthContext, workflow: Workflow) -> None:
 @router.get(
     "/",
 )
-async def read_workflows(
+async def read_all(
     auth: AuthContext = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -76,7 +76,7 @@ async def read_workflows(
 @router.post(
     "/",
 )
-async def create_workflow(
+async def create(
     body: CreateWorkflowRequest,
     request: Request,
     auth: AuthContext = Depends(get_current_user),
@@ -93,7 +93,7 @@ async def create_workflow(
         session.commit()
         workflow_id = workflow.public_id
     except SQLAlchemyError as e:
-        print("Error(create_workflow)", e)
+        print("Error(create)", e)
         raise HTTPException(status_code=500, detail="Could not create workflow")
 
     try:
@@ -123,7 +123,7 @@ async def create_workflow(
 @router.get(
     "/{workflow_id}",
 )
-async def read_workflow(
+async def read(
     workflow_id: str,
     auth: AuthContext = Depends(get_current_user),
     session: Session = Depends(get_session),
@@ -136,7 +136,7 @@ async def read_workflow(
             select(Workflow).where(Workflow.public_id == workflow_id)
         ).one()
     except SQLAlchemyError as e:
-        print("Error(read_workflow)", e)
+        print("Error(read)", e)
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     verify_tenant_owns_workflow(auth, workflow)
@@ -160,14 +160,14 @@ async def workflow_event(request: Request, workflow_id: str):
 
                 yield workflow.status.name
             except SQLAlchemyError as e:
-                print("Error(stream_workflow)", e)
+                print("Error(stream)", e)
                 raise HTTPException(status_code=500)
 
         await asyncio.sleep(STREAM_DELAY)
 
 
 @router.get("/{workflow_id}/stream")
-async def stream_workflow(
+async def stream(
     request: Request,
     workflow_id: str,
     token: str,
