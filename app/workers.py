@@ -4,7 +4,11 @@ from pydantic_ai.durable_exec.temporal import PydanticAIPlugin
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from app.activities import metadata_extraction, store_workflow_result, text_extraction
+from app.activities import (
+    extract_metadata_with_llm,
+    extract_pdf_text,
+    store_workflow_result,
+)
 from app.config import get_settings
 from app.workflows.extract_metadata_workflow import ExtractMetadata
 
@@ -24,8 +28,8 @@ async def main():
             ExtractMetadata,
         ],
         activities=[
-            text_extraction,  # Activity for extraction all text from the PDF
-            metadata_extraction,  # Activity for extraction metadata from PDF text
+            extract_pdf_text,  # Activity for extracting all text from the PDF
+            extract_metadata_with_llm,  # Activity for extracting metadata via LLM
             store_workflow_result,  # Activity to persist status/results
         ],
     )

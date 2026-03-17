@@ -37,6 +37,9 @@ Return a list of typed suggestions for the following fields:
 - title (string)
 - description (string; the abstract/summary)
 - creators (list of objects with: name, affiliation (optional), orcid (optional))
+- doi (string; the Digital Object Identifier")
+- publication_date (string; European format DD/MM/YYYY or YYYY if only
+  month/year is known)
 
 Rules:
 - Only include information that is clearly stated in the text.
@@ -65,7 +68,9 @@ def _create_model() -> OpenAIChatModel:
 
 
 @activity.defn
-async def metadata_extraction(request: ExtractMetadataRequest) -> MetadataResult:
+async def extract_metadata_with_llm(
+    request: ExtractMetadataRequest,
+) -> MetadataResult:
     """Generate typed metadata suggestions using an LLM."""
     model = _create_model()
     agent = Agent(

@@ -58,8 +58,26 @@ class CreatorsSuggestion(BaseModel):
         return [c for c in v if c.name]
 
 
+class DoiSuggestion(BaseModel):
+    """Suggestion for `doi`."""
+
+    field: Literal["doi"] = "doi"
+    value: str
+
+
+class PublicationDateSuggestion(BaseModel):
+    """Suggestion for `publication_date` ."""
+
+    field: Literal["publication_date"] = "publication_date"
+    value: str
+
+
 MetadataSuggestion = Annotated[
-    TitleSuggestion | DescriptionSuggestion | CreatorsSuggestion,
+    TitleSuggestion
+    | DescriptionSuggestion
+    | CreatorsSuggestion
+    | DoiSuggestion
+    | PublicationDateSuggestion,
     Field(discriminator="field"),
 ]
 

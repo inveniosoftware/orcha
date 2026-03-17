@@ -6,8 +6,14 @@ from pydantic_ai.durable_exec.temporal import (
 )
 from temporalio import workflow
 
-from app.activities.extract_metadata import ExtractMetadataRequest, metadata_extraction
-from app.activities.extract_pdf_content import ExtractPdfContentRequest, text_extraction
+from app.activities.extract_metadata import (
+    ExtractMetadataRequest,
+    extract_metadata_with_llm,
+)
+from app.activities.extract_pdf_content import (
+    ExtractPdfContentRequest,
+    extract_pdf_text,
+)
 from app.activities.store_workflow_result import (
     StoreWorkflowResultRequest,
     store_workflow_result,
@@ -37,7 +43,7 @@ class ExtractMetadata(PydanticAIWorkflow):
         try:
             # Activity 1: Extract PDF text
             content = await workflow.execute_activity(
-                text_extraction,
+                extract_pdf_text,
                 ExtractPdfContentRequest(
                     url=request.url,
                     extractor=request.extractor,
@@ -48,7 +54,7 @@ class ExtractMetadata(PydanticAIWorkflow):
 
             # Activity 2: Generate metadata suggestions using LLM
             result = await workflow.execute_activity(
-                metadata_extraction,
+                extract_metadata_with_llm,
                 ExtractMetadataRequest(text=content.text),
                 start_to_close_timeout=timedelta(minutes=5),
             )

@@ -23,7 +23,7 @@ class ExtractPdfContentResponse(BaseModel):
 
 
 @activity.defn
-async def text_extraction(
+async def extract_pdf_text(
     request: ExtractPdfContentRequest,
 ) -> ExtractPdfContentResponse:
     """Download PDF from a URL and extract its content using the specified extractor."""
