@@ -27,7 +27,7 @@ def dispose_engine() -> None:
 def get_engine() -> Engine:
     """Return the global engine, initializing it if needed."""
     if _engine is None:
-        return init_engine()
+        raise RuntimeError("Engine is not initialized!")
     return _engine
 
 
