@@ -38,8 +38,12 @@ Return a list of typed suggestions for the following fields:
 - description (string; the abstract/summary)
 - creators (list of objects with: name, affiliation (optional), orcid (optional))
 - doi (string; the Digital Object Identifier")
-- publication_date (string; European format DD/MM/YYYY or YYYY if only
-  month/year is known)
+- publication_date (string; ISO 8601, examples:
+    - "2014-07-17" (full date known)
+    - "2014" (only year known)
+    - Input: "17 July 2023" -> Output: "2023-07-17"
+    - Input: "July 2023" -> Output: "2023"
+    - Input: "2023-07" -> Output: "2023")
 
 Rules:
 - Only include information that is clearly stated in the text.

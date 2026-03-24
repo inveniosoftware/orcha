@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from sqlmodel import select
 from temporalio import activity
 
 from app.database.models import Workflow, WorkflowStatus
-from app.database.session import get_engine
+from app.database.session import get_session
 
 
-class StoreWorkflowResultRequest(BaseModel):
-    """Request to persist a workflow result."""
+class WorkflowResultInput(BaseModel):
+    """Input payload to persist a workflow result."""
 
     workflow_id: str = Field(description="Workflow public_id")
     tenant_id: str = Field(description="Tenant id (ownership check)")
@@ -23,10 +23,9 @@ class StoreWorkflowResultRequest(BaseModel):
 
 
 @activity.defn
-async def store_workflow_result(request: StoreWorkflowResultRequest) -> None:
+async def store_workflow_result(request: WorkflowResultInput) -> None:
     """Persist workflow status/result to the database."""
-    engine = get_engine()
-    with Session(engine) as session:
+    with get_session() as session:
         workflow = session.exec(
             select(Workflow).where(Workflow.public_id == request.workflow_id)
         ).one()

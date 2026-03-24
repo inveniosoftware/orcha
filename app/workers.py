@@ -10,11 +10,13 @@ from app.activities import (
     store_workflow_result,
 )
 from app.config import get_settings
+from app.database.session import init_engine
 from app.workflows.extract_metadata_workflow import ExtractMetadata
 
 
 async def main():
     """Start the Temporal worker."""
+    init_engine()
     settings = get_settings()
     client = await Client.connect(
         settings.temporal_host,

@@ -15,7 +15,7 @@ from app.activities.extract_pdf_content import (
     extract_pdf_text,
 )
 from app.activities.store_workflow_result import (
-    StoreWorkflowResultRequest,
+    WorkflowResultInput,
     store_workflow_result,
 )
 from app.database.models import WorkflowStatus
@@ -37,9 +37,8 @@ class ExtractMetadata(PydanticAIWorkflow):
     """Workflow that extracts content from a PDF and uses an LLM to extract metadata."""
 
     @workflow.run
-    async def run(self, request_data: dict) -> MetadataResult:
+    async def run(self, request: ExtractMetadataWorkflowRequest) -> MetadataResult:
         """Execute the extraction + suggestions workflow."""
-        request = ExtractMetadataWorkflowRequest(**request_data)
         try:
             # Activity 1: Extract PDF text
             content = await workflow.execute_activity(
@@ -61,7 +60,7 @@ class ExtractMetadata(PydanticAIWorkflow):
         except Exception:
             await workflow.execute_activity(
                 store_workflow_result,
-                StoreWorkflowResultRequest(
+                WorkflowResultInput(
                     workflow_id=request.workflow_id,
                     tenant_id=request.tenant_id,
                     status=WorkflowStatus.ERROR,
@@ -73,7 +72,7 @@ class ExtractMetadata(PydanticAIWorkflow):
 
         await workflow.execute_activity(
             store_workflow_result,
-            StoreWorkflowResultRequest(
+            WorkflowResultInput(
                 workflow_id=request.workflow_id,
                 tenant_id=request.tenant_id,
                 status=WorkflowStatus.SUCCESS,

@@ -11,9 +11,12 @@ from temporalio.client import Client
 
 from app.auth import AuthContext, decode_access_token
 from app.database.models import Workflow, WorkflowStatus
-from app.database.session import get_session
+from app.database.session import get_db_session
 from app.dependencies import get_current_user
-from app.workflows.extract_metadata_workflow import ExtractMetadata
+from app.workflows.extract_metadata_workflow import (
+    ExtractMetadata,
+    ExtractMetadataWorkflowRequest,
+)
 
 router = APIRouter(
     prefix="/workflows",
@@ -64,7 +67,7 @@ def verify_tenant_owns_workflow(auth: AuthContext, workflow: Workflow) -> None:
 )
 async def read_all(
     auth: AuthContext = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ):
     """List all workflows for the authenticated tenant."""
     workflows = session.exec(
@@ -80,7 +83,7 @@ async def create(
     body: CreateWorkflowRequest,
     request: Request,
     auth: AuthContext = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ):
     """Create a new workflow and start the Temporal extraction."""
     workflow = Workflow(
@@ -101,13 +104,13 @@ async def create(
         await client.start_workflow(
             ExtractMetadata.run,
             args=[
-                {
-                    "workflow_id": workflow_id,
-                    "tenant_id": auth.tenant_id,
-                    "url": body.url,
-                    "extractor": body.extractor,
-                    "pages": body.pages,
-                }
+                ExtractMetadataWorkflowRequest(
+                    workflow_id=workflow_id,
+                    tenant_id=auth.tenant_id,
+                    url=body.url,
+                    extractor=body.extractor,
+                    pages=body.pages,
+                )
             ],
             id=f"extract-metadata-{workflow_id}",
             task_queue="extract-pdf-metadata-task-queue",
@@ -132,7 +135,7 @@ async def create(
 async def read(
     workflow_id: str,
     auth: AuthContext = Depends(get_current_user),
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ):
     """Get a single workflow by its public ID."""
     verify_workflow_access(auth, workflow_id)
@@ -177,7 +180,7 @@ async def stream(
     request: Request,
     workflow_id: str,
     token: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ):
     """Stream workflow status updates via SSE.
 

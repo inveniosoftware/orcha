@@ -10,7 +10,10 @@ from pydantic import BaseModel, Field, field_validator
 class Creator(BaseModel):
     """A structured creator/author."""
 
-    name: str  # "Family, Given"
+    name: str = Field(
+        description="Full name in '<family>, <given>' format",
+        examples=["Smith, John"],
+    )
     affiliation: str | None = None
     orcid: str | None = None
 
@@ -70,6 +73,20 @@ class PublicationDateSuggestion(BaseModel):
 
     field: Literal["publication_date"] = "publication_date"
     value: str
+
+    @field_validator("value")
+    @classmethod
+    def normalize_publication_date(cls, v: str) -> str:
+        """Apply normalization for publication dates."""
+        cleaned = " ".join(v.split()).strip()
+        # Keep existing canonical full dates.
+        if len(cleaned) == 10 and cleaned[4] == "-" and cleaned[7] == "-":
+            return cleaned
+        # Convert YYYY-MM to YYYY.
+        if len(cleaned) == 7 and cleaned[4] == "-":
+            return cleaned[:4]
+        # Keep year-only and unknown formats as-is.
+        return cleaned
 
 
 MetadataSuggestion = Annotated[

@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from contextlib import contextmanager
 
 from sqlalchemy import Engine
 from sqlmodel import Session, create_engine
@@ -31,7 +32,14 @@ def get_engine() -> Engine:
     return _engine
 
 
+@contextmanager
 def get_session() -> Generator[Session, None, None]:
-    """Yield a database session."""
+    """Provide a database session context manager."""
     with Session(get_engine()) as session:
+        yield session
+
+
+def get_db_session() -> Generator[Session, None, None]:
+    """Make a database session for FastAPI dependencies."""
+    with get_session() as session:
         yield session
