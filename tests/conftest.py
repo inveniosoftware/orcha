@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import StaticPool, create_engine
 from sqlmodel import Session, SQLModel
 
-from app.database.session import get_session
+from app.database.session import get_db_session
 from app.main import app
 
 # In-memory SQLite engine shared across all sessions via StaticPool.
@@ -32,7 +32,7 @@ def db_session():
         with Session(_test_engine) as session:
             yield session
 
-    app.dependency_overrides[get_session] = _override_get_session
+    app.dependency_overrides[get_db_session] = _override_get_session
 
     # Also set db_engine on app state so code that creates Session()
     # directly (e.g. the SSE stream generator) uses the test engine.
