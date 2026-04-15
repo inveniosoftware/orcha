@@ -82,3 +82,18 @@ class ExtractMetadata(PydanticAIWorkflow):
         )
 
         return result
+
+
+# Self-register so the API router can dispatch this workflow by name.
+from app.workflows.registry import WorkflowSpec, register_workflow
+
+register_workflow(
+    "extract_metadata",
+    WorkflowSpec(
+        workflow_fn=ExtractMetadata.run,
+        request_class=ExtractMetadataWorkflowRequest,
+        task_queue="extract-pdf-metadata-task-queue",
+        id_prefix="extract-metadata",
+        param_fields=("url", "extractor", "pages"),
+    ),
+)

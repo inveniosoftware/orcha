@@ -196,6 +196,7 @@ def test_auth_disabled_bypass(client, monkeypatch):
 def test_workflow_scoped_access_granted(client, db_session):
     """A token with a matching workflow_id is permitted."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
@@ -229,6 +230,7 @@ def test_workflow_scoped_access_denied(client):
 def test_workflow_admin_access_granted(client, db_session):
     """A token with no workflow_id or workflow_id='*' is permitted."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
@@ -255,6 +257,7 @@ def test_workflow_admin_access_granted(client, db_session):
 def test_tenant_cannot_access_other_tenants_workflow(client, db_session):
     """Tenant B cannot access a workflow owned by tenant A."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
@@ -386,6 +389,7 @@ def test_stream_workflow_scope_mismatch_returns_403(client):
 def test_stream_cross_tenant_returns_403(client, db_session):
     """Tenant B cannot stream a workflow owned by tenant A."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
@@ -403,6 +407,7 @@ def test_stream_cross_tenant_returns_403(client, db_session):
 def test_stream_valid_token_returns_200(client, db_session):
     """A valid token for the owning tenant streams successfully."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
@@ -423,7 +428,13 @@ def test_stream_valid_token_returns_200(client, db_session):
 
 def test_create_workflow_requires_auth(client):
     """POST /workflows/ without a token is rejected."""
-    response = client.post("/workflows/", json={"url": "https://example.com/doc.pdf"})
+    response = client.post(
+        "/workflows/",
+        json={
+            "workflow_type": "extract_metadata",
+            "params": {"url": "https://example.com/doc.pdf"},
+        },
+    )
     assert response.status_code == 401
 
 
@@ -437,7 +448,10 @@ def test_create_workflow_stamps_tenant_id(client, db_session, mocker):
 
     response = client.post(
         "/workflows/",
-        json={"url": "https://example.com/doc.pdf"},
+        json={
+            "workflow_type": "extract_metadata",
+            "params": {"url": "https://example.com/doc.pdf"},
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
@@ -447,6 +461,7 @@ def test_create_workflow_stamps_tenant_id(client, db_session, mocker):
     wf = db_session.get(Workflow, 1)
     assert wf is not None
     assert wf.tenant_id == "tenant-a"
+    assert wf.workflow_type == "extract_metadata"
     assert wf.public_id == created_id
 
 
@@ -460,11 +475,13 @@ def test_list_workflows_tenant_isolation(client, db_session):
     """GET /workflows/ only returns workflows for the authenticated tenant."""
     # Create workflows for two different tenants
     wf_a = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_a.pdf",
         tenant_id="tenant-a",
     )
     wf_b = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test_b.pdf",
         tenant_id="tenant-b",
@@ -504,6 +521,7 @@ def test_list_workflows_tenant_isolation(client, db_session):
 def test_read_workflow_includes_result(client, db_session):
     """GET /workflows/{id} includes `result.suggestions` when present."""
     wf = Workflow(
+        workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
         url="https://example.com/test.pdf",
         tenant_id="tenant-a",

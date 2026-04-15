@@ -25,6 +25,7 @@ class Workflow(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     public_id: str = Field(default_factory=nanoid)
+    workflow_type: str
     url: str
     status: WorkflowStatus
     tenant_id: str
@@ -34,6 +35,7 @@ class Workflow(SQLModel, table=True):
         """Convert workflow to a dictionary representation."""
         return {
             "public_id": self.public_id,
+            "workflow_type": self.workflow_type,
             "status": self.status,
             "url": self.url,
             "tenant_id": self.tenant_id,
