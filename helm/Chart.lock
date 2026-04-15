@@ -1,0 +1,9 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.5.7
+- name: temporal
+  repository: https://go.temporal.io/helm-charts
+  version: 0.73.1
+digest: sha256:e560849947eb28377fb837ff5e664918e610cb6b1c287109472e5d35019c9c5d
+generated: "2026-03-18T18:44:55.62055+01:00"

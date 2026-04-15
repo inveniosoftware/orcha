@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 # Apply CORS middleware using settings
 _settings = get_settings()
 if _settings.allowed_origins:
@@ -50,5 +51,11 @@ app.include_router(workflows.router)
 
 @app.get("/")
 async def root(auth=Depends(get_current_user)):
-    """Health check endpoint."""
+    """Root endpoint."""
     return {"message": "This is the backend service for Orcha!"}
+
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    """Health check endpoint, non-authenticated."""
+    return {"status": "ok"}

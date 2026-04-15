@@ -1,0 +1,206 @@
+## Orcha image version
+## ref: to be added
+## @param image.registry Orcha image registry
+## @param image.repository Orcha image repository
+## @param image.tag Orcha image tag (immutable tags are recommended). Defaults to .Chart.appVersion
+## @param image.digest Orcha image digest in the way sha256:aa.... Please note this parameter, if set, will override the tag
+## @param image.pullPolicy Orcha image pull policy
+## @param image.pullSecrets Orcha image pull secrets
+image:
+  registry: ghcr.io/inveniosoftware  # to be created
+  repository: orcha/orcha
+  tag: ""
+  digest: ""
+  ## Specify a imagePullPolicy
+  ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
+  ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
+  ##
+  pullPolicy: IfNotPresent
+  ## Optionally specify an array of imagePullSecrets.
+  ## Secrets must be manually created in the namespace.
+  ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+  ## e.g:
+  ## pullSecrets:
+  ##   - name: myRegistryKeySecretName
+  ##
+  pullSecrets: []
+
+## Openshift Route object
+## @param route.annotations Annotations to be added to the Route
+route:
+  annotations:
+  enabled: true
+  host: ""
+
+## Orcha ingress parameters
+## ref: https://kubernetes.io/docs/concepts/services-networking/ingress/
+##
+ingress:
+  ## @param ingress.enabled Enable ingress record generation for Orcha.
+  ##
+  enabled: false
+  ## @param ingress.class IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
+  ## This is supported in Kubernetes 1.18+ and required if you have more than one IngressClass marked as the default for your cluster .
+  ## ref: https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/
+  ##
+  class: ""
+  ## @param ingress.annotations Additional annotations for the Ingress resource. To enable certificate autogeneration, place here your cert-manager annotations.
+  ## Use this parameter to set the required annotations for cert-manager, see
+  ## ref: https://cert-manager.io/docs/usage/ingress/#supported-annotations
+  ## e.g:
+  ## annotations:
+  ##   kubernetes.io/ingress.class: nginx
+  ##   cert-manager.io/cluster-issuer: cluster-issuer-name
+  ##
+  annotations:
+  ## @param ingress.tlsSecretNameOverride Custom TLS secret name.
+  ##
+  tlsSecretNameOverride: ""
+
+# Orcha application config — all sensitive values should be
+# overridden via --set or a separate secrets.yaml at deploy time
+config:
+  # Authentication
+  authDisabled: false
+  tenantsJson: |
+    {
+      "tenants": []
+    }
+
+  # OpenAI (or other LLM)
+  liteLlmApiKey: ""
+  liteLlmApiBase: ""
+  llm: ""
+
+  # Temporal
+  temporalHost: "{{ .Release.Name }}-temporal-frontend:7233"
+  temporalNamespace: default
+
+  # Database
+#  change with dbod values
+  databaseUrl: ""
+
+orcha:
+  ## @param orcha.hostname Orcha hostname (templated) used in configuration variables like TRUSTED_HOSTS, SITE_HOSTNAME or SITE_URL
+  ##
+  hostname: ""
+  ## @param orcha.existingSecret General existing secret name for, at least, PGPASSWORD and LLM values
+  ##
+  existingSecret: ""
+
+## @section PostgreSQL chart configuration
+### ref: https://github.com/bitnami/charts/blob/main/bitnami/postgresql/values.yaml
+### @param postgresql.enabled Switch to enable or disable the PostgreSQL helm chart
+### @param postgresql.auth.username Name for a custom user to create
+### @param postgresql.auth.password Password for the custom user to create
+### @param postgresql.auth.database Name for a custom database to create
+### @param postgresql.auth.existingSecret Name os the existing secret to get the password from.
+###
+postgresql:
+  enabled: false
+  auth:
+    username: orcha
+    password: orcha
+    database: orcha
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+## @param postgresqlExternal External PostgreSQL configuration
+## All of these values are only used when postgresql.enabled is set to false
+## @extra postgresqlExternal.host Database host
+## @extra postgresqlExternal.port Database port number
+## @extra postgresqlExternal.user Non-root username for Orcha
+## @extra postgresqlExternal.password Password for the non-root username for Orcha
+## @extra postgresqlExternal.database Orcha instance database name
+## @extra postgresqlExternal.existingSecret Name of an existing secret resource containing the database credentials
+## @extra postgresqlExternal.existingSecretPasswordKey Name of an existing secret key containing the database credentials
+##
+postgresqlExternal: {}
+  # hostname: ""
+  # port: 5432
+  # username: orcha
+  # password: ""
+  # database: orcha
+  # existingSecret: ""
+  # existingSecretPasswordKey: "password"
+
+## @section FastAPI server
+##
+api:
+  replicaCount: 1
+  ## @param api.resources `resources` for the api container
+  ##
+  resources: {}
+#    requests:
+#      cpu: 100m
+#      memory: 256Mi
+#    limits:
+#      cpu: 500m
+#      memory: 512Mi
+  ## Orcha api service parameters
+  ##
+  service:
+    ## @param api.service.annotations Add extra (templated) annotations to the api service
+    ##
+    annotations: { }
+    ## @param api.service.type Web service type
+    ##
+    type: ClusterIP
+    port: 8000
+
+## @section Temporal worker
+##
+worker:
+  replicaCount: 1
+  ## @param worker.resources `resources` for the worker container
+  ##
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+## @section Temporal server
+##
+temporal:
+  enabled: true
+  server:
+    replicaCount: 1
+    config:
+      persistence:
+        default:
+          driver: sql
+          sql:
+            driver: postgres12
+            host: ""
+            port: ""
+            database: temporal
+            user: temporal_user
+            existingSecret: ""  # OpenShift secret
+            existingSecretKey: "password"
+        visibility:
+          driver: sql
+          sql:
+            driver: postgres12
+            host: ""
+            port: ""
+            database: temporal_visibility
+            user: temporal_user
+            existingSecret: ""  # OpenShift secret
+            existingSecretKey: "password"
+  cassandra:
+    enabled: false
+  mysql:
+    enabled: false
+  postgresql:
+    enabled: false
+  elasticsearch:
+    enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false

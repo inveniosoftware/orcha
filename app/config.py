@@ -23,8 +23,13 @@ class Settings(BaseSettings):
     auth_disabled: bool = False
     tenants_config_path: str = "tenants.json"
 
-    # Security
-    allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://localhost:5000",
+        "https://127.0.0.1:5000",
+        "https://orcha.app.cern.ch",
+    ]
 
     # LLM
     # TODO Currently we have only a single workflow, so single LLM configuration

@@ -1,0 +1,21 @@
+{{- if .Capabilities.APIVersions.Has "route.openshift.io/v1/Route" }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "orcha.fullname" . }}
+  {{- if and .Values.route .Values.route.annotations }}
+  annotations:
+    {{- .Values.route.annotations | toYaml | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ include "orcha.hostname" $ }}
+  to:
+    kind: Service
+    name: {{ include "orcha.fullname" . }}-api
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  {{- end }}

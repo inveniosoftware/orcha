@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orcha.fullname" . }}-worker
+  labels:
+    {{- include "orcha.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "orcha.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "orcha.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+      - name: worker
+        image: {{ include "orcha.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/app/.venv/bin/orcha", "run", "workers"]
+        envFrom:
+          - configMapRef:
+              name: {{ include "orcha.fullname" . }}
+          - secretRef:
+              name: {{ include "orcha.fullname" . }}
+
+        resources:
+          {{- toYaml .Values.worker.resources | nindent 12 }}
