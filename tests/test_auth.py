@@ -183,12 +183,8 @@ def test_auth_cross_tenant_key_rejected(client):
 
 def test_auth_disabled_bypass(client, monkeypatch):
     """When AUTH_DISABLED is true, any request passes without a token."""
-    import app.dependencies as deps
-    from app.config import Settings
-
-    monkeypatch.setattr(deps, "settings", Settings(auth_disabled=True))
-    # oauth2_scheme captures auto_error at import time, so also patch it
-    monkeypatch.setattr(deps.oauth2_scheme, "auto_error", False)
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    get_settings.cache_clear()
 
     response = client.get("/")
     assert response.status_code == 200

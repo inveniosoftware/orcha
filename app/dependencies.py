@@ -2,18 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from .auth import AuthContext, decode_access_token
 from .config import get_settings
 from .tenants import TenantRegistry
 
-settings = get_settings()
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="token", auto_error=not settings.auth_disabled
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 
 def get_tenant_registry(request: Request) -> TenantRegistry:
@@ -44,7 +40,15 @@ async def get_current_user(
     Returns:
         An AuthContext with tenant_id and optional workflow_id.
     """
+    settings = get_settings()
     if settings.auth_disabled:
         return AuthContext(tenant_id="dev-tenant")
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return decode_access_token(token, tenant_registry)
