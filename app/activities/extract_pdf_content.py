@@ -4,6 +4,7 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from app.extractors import get_extractor
+from app.extractors.errors import InvalidPageSelectionError
 
 
 class ExtractPdfContentRequest(BaseModel):
@@ -44,7 +45,14 @@ async def extract_pdf_text(
             non_retryable=True,
         ) from e
 
-    result = extractor.extract(pdf_bytes, request.pages)
+    try:
+        result = extractor.extract(pdf_bytes, request.pages)
+    except InvalidPageSelectionError as e:
+        raise ApplicationError(
+            str(e),
+            type="InvalidPageSelection",
+            non_retryable=True,
+        ) from e
 
     return ExtractPdfContentResponse(
         text=result["full_text"],
