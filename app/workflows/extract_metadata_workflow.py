@@ -19,7 +19,8 @@ from app.activities.store_workflow_result import (
     store_workflow_result,
 )
 from app.database.models import WorkflowStatus
-from app.workflows.suggestions import MetadataResult
+from app.schemas.metadata_suggestions import MetadataSuggestions
+from app.workflows.registry import WorkflowSpec, register_workflow
 
 
 class ExtractMetadataWorkflowRequest(BaseModel):
@@ -29,7 +30,7 @@ class ExtractMetadataWorkflowRequest(BaseModel):
     tenant_id: str = Field(description="Tenant id (ownership check)")
     url: str
     extractor: str = "pdfplumber"
-    pages: list[int] | None = None
+    pages: list[int] | None = [1, 2]
 
 
 @workflow.defn
@@ -37,7 +38,7 @@ class ExtractMetadata(PydanticAIWorkflow):
     """Workflow that extracts content from a PDF and uses an LLM to extract metadata."""
 
     @workflow.run
-    async def run(self, request: ExtractMetadataWorkflowRequest) -> MetadataResult:
+    async def run(self, request: ExtractMetadataWorkflowRequest) -> MetadataSuggestions:
         """Execute the extraction + suggestions workflow."""
         try:
             # Activity 1: Extract PDF text
@@ -83,9 +84,6 @@ class ExtractMetadata(PydanticAIWorkflow):
 
         return result
 
-
-# Self-register so the API router can dispatch this workflow by name.
-from app.workflows.registry import WorkflowSpec, register_workflow
 
 register_workflow(
     "extract_metadata",

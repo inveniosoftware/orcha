@@ -8,7 +8,7 @@ from pydantic_ai.providers.ollama import OllamaProvider
 from temporalio import activity
 
 from app.config import get_settings
-from app.workflows.suggestions import MetadataResult
+from app.schemas.metadata_suggestions import MetadataSuggestions
 
 
 def _parse_llm(llm: str) -> tuple[str, str]:
@@ -74,13 +74,13 @@ def _create_model() -> OpenAIChatModel:
 @activity.defn
 async def extract_metadata_with_llm(
     request: ExtractMetadataRequest,
-) -> MetadataResult:
+) -> MetadataSuggestions:
     """Generate typed metadata suggestions using an LLM."""
     model = _create_model()
     agent = Agent(
         model=model,
         instructions=INSTRUCTIONS,
-        output_type=MetadataResult,
+        output_type=MetadataSuggestions,
     )
 
     result = await agent.run(request.text)

@@ -13,7 +13,7 @@ class WorkflowSpec:
     """Describes a Temporal workflow that the API can dispatch."""
 
     workflow_fn: Any
-    """The ``@workflow.defn`` class's entry-point method (e.g. ``ExtractMetadata.run``)."""
+    """Entry-point method of the ``@workflow.defn`` class."""
 
     request_class: type[BaseModel]
     """Pydantic model used to validate workflow-specific parameters."""

@@ -121,9 +121,7 @@ async def create(
             session.commit()
         except SQLAlchemyError:
             pass
-        raise HTTPException(
-            status_code=500, detail="Could not start workflow"
-        )
+        raise HTTPException(status_code=500, detail="Could not start workflow")
 
     return workflow.to_dict()
 

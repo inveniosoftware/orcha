@@ -99,7 +99,7 @@ MetadataSuggestion = Annotated[
 ]
 
 
-class MetadataResult(BaseModel):
+class MetadataSuggestions(BaseModel):
     """Container for all metadata suggestions from a workflow run."""
 
     suggestions: list[MetadataSuggestion]
