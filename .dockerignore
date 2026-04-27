@@ -1,0 +1,14 @@
+# Ignore everything by default
+*
+
+# Only include what's needed to build and run
+!app/
+!pyproject.toml
+!uv.lock
+!README.md
+
+# Exclude caches from included dirs
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
