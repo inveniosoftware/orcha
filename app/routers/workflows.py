@@ -175,20 +175,20 @@ async def workflow_event(request: Request, workflow_id: str):
 
             status = workflow.status
 
-            if status == WorkflowStatus.SUCCESS:
-                yield ServerSentEvent(
-                    data=json.dumps(workflow.result), event="metadata"
-                )
-                yield ServerSentEvent(data="done", event="end")
-                break
-
-            if status == WorkflowStatus.ERROR:
-                yield ServerSentEvent(
-                    data=json.dumps({"error_code": "WORKFLOW_FAILED"}),
-                    event="error",
-                )
-                yield ServerSentEvent(data="done", event="end")
-                break
+            match status:
+                case WorkflowStatus.SUCCESS:
+                    yield ServerSentEvent(
+                        data=json.dumps(workflow.result), event="metadata"
+                    )
+                    yield ServerSentEvent(data="done", event="end")
+                    break
+                case WorkflowStatus.ERROR:
+                    yield ServerSentEvent(
+                        data=json.dumps({"error_code": "WORKFLOW_FAILED"}),
+                        event="error",
+                    )
+                    yield ServerSentEvent(data="done", event="end")
+                    break
 
         except WorkflowEventError as e:
             yield ServerSentEvent(

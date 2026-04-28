@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     ollama_api_key: str | None = None
 
     # Environment
-    orcha_env: str = "local"
+    env: str = "local"
 
     @property
     def database_url(self) -> str:

@@ -32,7 +32,7 @@ async def extract_pdf_text(
     request: ExtractPdfContentRequest,
 ) -> ExtractPdfContentResponse:
     """Read a file and extract its text content using the specified extractor."""
-    if settings.orcha_env in {"local", "dev"}:
+    if settings.env in {"local", "dev"}:
         try:
             with open(request.url, "rb") as f:
                 pdf_bytes = f.read()
