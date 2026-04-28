@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from pydantic_ai.durable_exec.temporal import (
     PydanticAIWorkflow,
 )
@@ -19,7 +19,22 @@ from app.activities.store_workflow_result import (
     store_workflow_result,
 )
 from app.database.models import WorkflowStatus
-from app.workflows.suggestions import MetadataResult
+from app.schemas.metadata_suggestions import MetadataSuggestions
+from app.workflows.registry import (
+    WorkflowContext,
+    WorkflowSpec,
+    register_workflow,
+)
+
+
+class ExtractMetadataParams(BaseModel):
+    """User-provided params for the extract_metadata workflow."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: HttpUrl
+    extractor: str = "pdfplumber"
+    pages: list[int] | None = Field(default_factory=lambda: [1, 2])
 
 
 class ExtractMetadataWorkflowRequest(BaseModel):
@@ -29,7 +44,24 @@ class ExtractMetadataWorkflowRequest(BaseModel):
     tenant_id: str = Field(description="Tenant id (ownership check)")
     url: str
     extractor: str = "pdfplumber"
-    pages: list[int] | None = None
+    pages: list[int] | None = Field(default_factory=lambda: [1, 2])
+
+
+def build_extract_metadata_request(
+    context: WorkflowContext,
+    params: BaseModel,
+) -> ExtractMetadataWorkflowRequest:
+    """Combine validated workflow params with server-generated context."""
+    if not isinstance(params, ExtractMetadataParams):
+        raise TypeError("Expected ExtractMetadataParams")
+
+    return ExtractMetadataWorkflowRequest(
+        workflow_id=context.workflow_id,
+        tenant_id=context.tenant_id,
+        url=str(params.url),
+        extractor=params.extractor,
+        pages=params.pages,
+    )
 
 
 @workflow.defn
@@ -37,7 +69,7 @@ class ExtractMetadata(PydanticAIWorkflow):
     """Workflow that extracts content from a PDF and uses an LLM to extract metadata."""
 
     @workflow.run
-    async def run(self, request: ExtractMetadataWorkflowRequest) -> MetadataResult:
+    async def run(self, request: ExtractMetadataWorkflowRequest) -> MetadataSuggestions:
         """Execute the extraction + suggestions workflow."""
         try:
             # Activity 1: Extract PDF text
@@ -82,3 +114,15 @@ class ExtractMetadata(PydanticAIWorkflow):
         )
 
         return result
+
+
+register_workflow(
+    "extract_metadata",
+    WorkflowSpec(
+        workflow_fn=ExtractMetadata.run,
+        params_model=ExtractMetadataParams,
+        request_builder=build_extract_metadata_request,
+        task_queue="extract-pdf-metadata-task-queue",
+        id_prefix="extract-metadata",
+    ),
+)
