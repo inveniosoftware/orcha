@@ -1,4 +1,4 @@
-# Orcha Workflows
+# Orcha
 
 Backend service for Orcha AI extraction, built with **FastAPI**, **Temporal**, and **PostgreSQL**.
 

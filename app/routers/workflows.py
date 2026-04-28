@@ -1,18 +1,21 @@
 """Workflow API routes with tenant-scoped access control."""
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import Session, select
+from sse_starlette import EventSourceResponse, ServerSentEvent
 from temporalio.client import Client
 
 from app.auth import AuthContext, decode_access_token
 from app.database.models import Workflow, WorkflowStatus
 from app.database.session import get_db_session
 from app.dependencies import get_current_user
+from app.errors import WorkflowEventError
 from app.workflows.extract_metadata_workflow import (
     ExtractMetadata,
     ExtractMetadataWorkflowRequest,
@@ -158,19 +161,42 @@ async def workflow_event(request: Request, workflow_id: str):
         if await request.is_disconnected():
             break
 
-        with Session(request.app.state.db_engine) as session:
-            try:
-                workflow = session.exec(
-                    select(Workflow).where(Workflow.public_id == workflow_id)
-                ).one()
-                if workflow.status.name == "ERROR" or workflow.status.name == "SUCCESS":
-                    yield workflow.status.name
+        try:
+            with Session(request.app.state.db_engine) as session:
+                try:
+                    workflow = session.exec(
+                        select(Workflow).where(Workflow.public_id == workflow_id)
+                    ).one()
+                except NoResultFound:
+                    raise WorkflowEventError(error_code="WORKFLOW_NOT_FOUND")
+                except SQLAlchemyError as e:
+                    print("Error in fetching from database (stream_workflow)", e)
+                    raise WorkflowEventError(error_code="DB_FETCH_FAILED")
+
+            status = workflow.status
+
+            match status:
+                case WorkflowStatus.SUCCESS:
+                    yield ServerSentEvent(
+                        data=json.dumps(workflow.result), event="metadata"
+                    )
+                    yield ServerSentEvent(data="done", event="end")
+                    break
+                case WorkflowStatus.ERROR:
+                    yield ServerSentEvent(
+                        data=json.dumps({"error_code": "WORKFLOW_FAILED"}),
+                        event="error",
+                    )
+                    yield ServerSentEvent(data="done", event="end")
                     break
 
-                yield workflow.status.name
-            except SQLAlchemyError as e:
-                print("Error(stream)", e)
-                raise HTTPException(status_code=500)
+        except WorkflowEventError as e:
+            yield ServerSentEvent(
+                data=json.dumps({"error_code": e.error_code}),
+                event="error",
+            )
+            yield ServerSentEvent(data="done", event="end")
+            break
 
         await asyncio.sleep(STREAM_DELAY)
 
@@ -211,6 +237,6 @@ async def stream(
 
     verify_tenant_owns_workflow(auth, workflow)
 
-    return StreamingResponse(
+    return EventSourceResponse(
         workflow_event(request, workflow_id), media_type="text/event-stream"
     )
