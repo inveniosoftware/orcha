@@ -1,10 +1,11 @@
 """Workflow API routes with tenant-scoped access control."""
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from temporalio.client import Client
@@ -13,7 +14,7 @@ from app.auth import AuthContext, decode_access_token
 from app.database.models import Workflow, WorkflowStatus
 from app.database.session import get_db_session
 from app.dependencies import get_current_user
-from app.workflows.registry import get_workflow_spec
+from app.workflows.registry import WorkflowContext, get_workflow_spec
 
 router = APIRouter(
     prefix="/workflows",
@@ -28,7 +29,7 @@ class CreateWorkflowRequest(BaseModel):
     """Request body for creating a new workflow."""
 
     workflow_type: str
-    params: dict = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 def _get_temporal_client(request: Request) -> Client:
@@ -87,10 +88,15 @@ async def create(
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    try:
+        params = spec.params_model.model_validate(body.params)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
     workflow = Workflow(
         workflow_type=body.workflow_type,
         status=WorkflowStatus.PROCESSING,
-        url=body.params.get("url", ""),
+        params=params.model_dump(mode="json"),
         tenant_id=auth.tenant_id,
     )
     try:
@@ -102,10 +108,12 @@ async def create(
         raise HTTPException(status_code=500, detail="Could not create workflow")
 
     try:
-        workflow_request = spec.request_class(
-            workflow_id=workflow_id,
-            tenant_id=auth.tenant_id,
-            **body.params,
+        workflow_request = spec.request_builder(
+            WorkflowContext(
+                workflow_id=workflow_id,
+                tenant_id=auth.tenant_id,
+            ),
+            params,
         )
         client = _get_temporal_client(request)
         await client.start_workflow(

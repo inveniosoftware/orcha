@@ -7,6 +7,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.config import get_settings
 from app.database.models import Workflow, WorkflowStatus
@@ -198,7 +199,7 @@ def test_workflow_scoped_access_granted(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     db_session.add(wf)
@@ -232,7 +233,7 @@ def test_workflow_admin_access_granted(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     db_session.add(wf)
@@ -259,7 +260,7 @@ def test_tenant_cannot_access_other_tenants_workflow(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     db_session.add(wf)
@@ -391,7 +392,7 @@ def test_stream_cross_tenant_returns_403(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     db_session.add(wf)
@@ -409,7 +410,7 @@ def test_stream_valid_token_returns_200(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     db_session.add(wf)
@@ -462,7 +463,63 @@ def test_create_workflow_stamps_tenant_id(client, db_session, mocker):
     assert wf is not None
     assert wf.tenant_id == "tenant-a"
     assert wf.workflow_type == "extract_metadata"
+    assert wf.params == {
+        "url": "https://example.com/doc.pdf",
+        "extractor": "pdfplumber",
+        "pages": [1, 2],
+    }
     assert wf.public_id == created_id
+
+    mock_temporal.start_workflow.assert_awaited_once()
+    workflow_request = mock_temporal.start_workflow.await_args.kwargs["args"][0]
+    assert workflow_request.workflow_id == created_id
+    assert workflow_request.tenant_id == "tenant-a"
+    assert workflow_request.url == "https://example.com/doc.pdf"
+
+
+def test_create_workflow_rejects_invalid_params(client, db_session, mocker):
+    """POST /workflows/ returns 422 when workflow-specific params are invalid."""
+    token = generate_test_token()
+
+    mock_temporal = mocker.AsyncMock()
+    mocker.patch.object(client.app.state, "temporal_client", mock_temporal)
+
+    response = client.post(
+        "/workflows/",
+        json={
+            "workflow_type": "extract_metadata",
+            "params": {"extractor": "pdfplumber"},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert db_session.exec(select(Workflow)).all() == []
+    mock_temporal.start_workflow.assert_not_awaited()
+
+
+def test_create_workflow_rejects_unknown_params(client, db_session, mocker):
+    """POST /workflows/ returns 422 when extra workflow-specific params are present."""
+    token = generate_test_token()
+
+    mock_temporal = mocker.AsyncMock()
+    mocker.patch.object(client.app.state, "temporal_client", mock_temporal)
+
+    response = client.post(
+        "/workflows/",
+        json={
+            "workflow_type": "extract_metadata",
+            "params": {
+                "url": "https://example.com/doc.pdf",
+                "surprise": "value",
+            },
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert db_session.exec(select(Workflow)).all() == []
+    mock_temporal.start_workflow.assert_not_awaited()
 
 
 def test_list_workflows_requires_auth(client):
@@ -477,13 +534,13 @@ def test_list_workflows_tenant_isolation(client, db_session):
     wf_a = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_a.pdf",
+        params={"url": "https://example.com/test_a.pdf"},
         tenant_id="tenant-a",
     )
     wf_b = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test_b.pdf",
+        params={"url": "https://example.com/test_b.pdf"},
         tenant_id="tenant-b",
     )
     db_session.add_all([wf_a, wf_b])
@@ -523,7 +580,7 @@ def test_read_workflow_includes_result(client, db_session):
     wf = Workflow(
         workflow_type="extract_metadata",
         status=WorkflowStatus.SUCCESS,
-        url="https://example.com/test.pdf",
+        params={"url": "https://example.com/test.pdf"},
         tenant_id="tenant-a",
         result={"suggestions": [{"field": "title", "value": "My Title"}]},
     )
@@ -538,5 +595,6 @@ def test_read_workflow_includes_result(client, db_session):
     )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["params"]["url"] == "https://example.com/test.pdf"
     assert "result" in payload
     assert payload["result"]["suggestions"][0]["field"] == "title"

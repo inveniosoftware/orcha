@@ -77,7 +77,7 @@ async def extract_metadata_with_llm(
 ) -> MetadataSuggestions:
     """Generate typed metadata suggestions using an LLM."""
     model = _create_model()
-    agent = Agent(
+    agent = Agent[None, MetadataSuggestions](
         model=model,
         instructions=INSTRUCTIONS,
         output_type=MetadataSuggestions,

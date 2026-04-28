@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from pydantic import BaseModel
+
+
+@dataclass(frozen=True)
+class WorkflowContext:
+    """Server-generated context attached to every workflow invocation."""
+
+    workflow_id: str
+    tenant_id: str
 
 
 @dataclass(frozen=True)
@@ -15,17 +23,17 @@ class WorkflowSpec:
     workflow_fn: Any
     """Entry-point method of the ``@workflow.defn`` class."""
 
-    request_class: type[BaseModel]
-    """Pydantic model used to validate workflow-specific parameters."""
+    params_model: type[BaseModel]
+    """Pydantic model used to validate workflow-specific input params."""
+
+    request_builder: Callable[[WorkflowContext, BaseModel], BaseModel]
+    """Build the internal workflow request from validated params + context."""
 
     task_queue: str
     """Temporal task queue that workers listen on for this workflow."""
 
     id_prefix: str
     """Prefix used when constructing the Temporal workflow ID."""
-
-    param_fields: tuple[str, ...] = field(default_factory=tuple)
-    """Fields from the API ``params`` dict that are forwarded to *request_class*."""
 
 
 # Global registry — populated at import time by each workflow module.
@@ -52,7 +60,7 @@ def get_workflow_spec(name: str) -> WorkflowSpec:
     try:
         return WORKFLOW_REGISTRY[name]
     except KeyError:
-        registered = ", ".join(sorted(WORKFLOW_REGISTRY)) or "(none)"
+        registered = ", ".join(get_registered_types()) or "(none)"
         raise KeyError(
             f"Unknown workflow type {name!r}. Registered types: {registered}"
         ) from None
