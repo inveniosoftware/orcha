@@ -9,6 +9,10 @@ from app.workflows.check_funding_relevance_workflow import (
     CheckFundingRelevance,
     CheckFundingRelevanceParams,
 )
+from app.workflows.compare_metadata_workflow import (
+    CompareMetadata,
+    CompareMetadataParams,
+)
 from app.workflows.extract_metadata_workflow import (
     ExtractMetadata,
     ExtractMetadataParams,
@@ -28,6 +32,12 @@ WORKFLOW_REGISTRY: dict[str, WorkflowSpec] = {
         params_model=CheckFundingRelevanceParams,
         task_queue=DEFAULT_TASK_QUEUE,
         id_prefix="check-funding-relevance",
+    ),
+    "compare_metadata": WorkflowSpec(
+        workflow_cls=CompareMetadata,
+        params_model=CompareMetadataParams,
+        task_queue=DEFAULT_TASK_QUEUE,
+        id_prefix="compare-metadata",
     ),
 }
 
