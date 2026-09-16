@@ -26,6 +26,24 @@ class FunderEnum(str, Enum):
     ARC = "Australian Research Council"
 
 
+FUNDER_ROR_IDS = {
+    FunderEnum.NIH: "01cwqze88",
+    FunderEnum.NSF: "021nxhr62",
+    FunderEnum.UKRI: "001aqnf71",
+    FunderEnum.FNS: "00yjd3n13",
+    FunderEnum.EC: "00k4n6c32",
+    FunderEnum.FCT: "00snfqn58",
+    FunderEnum.NWO: "04jsz6e67",
+    FunderEnum.NHMRC: "011kf5r70",
+    FunderEnum.ANR: "00rbzpz17",
+    FunderEnum.ARC: "05mmh0f86",
+}
+
+FUNDER_NAMES_BY_ROR_ID = {
+    ror_id: funder.value for funder, ror_id in FUNDER_ROR_IDS.items()
+}
+
+
 class ExtractedMetadata(BaseModel):
     """Flat schema the LLM fills, converted to ``MetadataSuggestions``.
 

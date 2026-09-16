@@ -16,7 +16,7 @@ from temporalio.exceptions import ApplicationError
 
 from app.activities.utils import http_verify
 from app.config import get_settings
-from app.schemas.extracted_metadata import ExtractedMetadata, FunderEnum
+from app.schemas.extracted_metadata import FUNDER_ROR_IDS, ExtractedMetadata, FunderEnum
 from app.schemas.metadata_suggestions import (
     FundingSuggestion,
     LicenseSuggestion,
@@ -39,19 +39,6 @@ RESOLVE_METADATA_RETRY_POLICY = RetryPolicy(
 )
 
 _INVENIO_HEADERS = {"Accept": "application/vnd.inveniordm.v1+json"}
-
-FUNDER_ROR_IDS = {
-    FunderEnum.NIH: "01cwqze88",
-    FunderEnum.NSF: "021nxhr62",
-    FunderEnum.UKRI: "001aqnf71",
-    FunderEnum.FNS: "00yjd3n13",
-    FunderEnum.EC: "00k4n6c32",
-    FunderEnum.FCT: "00snfqn58",
-    FunderEnum.NWO: "04jsz6e67",
-    FunderEnum.NHMRC: "011kf5r70",
-    FunderEnum.ANR: "00rbzpz17",
-    FunderEnum.ARC: "05mmh0f86",
-}
 
 
 class ResolveMetadataRequest(BaseModel):

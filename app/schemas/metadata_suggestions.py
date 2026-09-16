@@ -3,8 +3,9 @@
 
 """Typed metadata suggestions returned by the workflow."""
 
-# from __future__ import annotations
+from difflib import SequenceMatcher
 
+# from __future__ import annotations
 from typing import Annotated, Literal
 
 from idutils.normalizers import normalize_orcid
@@ -51,6 +52,19 @@ class Creator(BaseModel):
         family = parts[-1]
         given = " ".join(parts[:-1])
         return f"{family}, {given}"
+
+    def matches(self, other: Creator) -> bool:
+        """Logic to pair two creator entries."""
+        name_self = " ".join(self.name.replace(",", "").split()).casefold()
+        name_other = " ".join(other.name.replace(",", "").split()).casefold()
+        return (
+            name_self == name_other
+            or SequenceMatcher(None, name_self, name_other).ratio() >= 0.85
+        )
+
+    def normalize_for_comparison(self, matched=None) -> dict:
+        """Return the dictionary with name, affiliation, and ORCID."""
+        return {"name": self.name, "orcid": self.orcid, "affiliation": self.affiliation}
 
 
 class TitleSuggestion(BaseModel):
