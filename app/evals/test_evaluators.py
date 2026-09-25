@@ -3,7 +3,7 @@
 
 import pytest
 
-from evals.evaluators import Evaluator, build_comparison_payload
+from app.evals.evaluators import Evaluator, build_comparison_payload
 
 
 def test_creator_score_penalizes_missing_expected_authors():

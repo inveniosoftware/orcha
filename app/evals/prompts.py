@@ -6,7 +6,7 @@
 from pathlib import Path
 from typing import Any
 
-PROMPTS_DIR = Path("evals/prompts")
+PROMPTS_DIR = Path(__file__).with_name("prompts")
 
 
 def sync_extraction_prompt(

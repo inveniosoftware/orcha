@@ -132,11 +132,48 @@ export LITELLM_API_BASE="<litellm-endpoint>"
 export LITELLM_API_KEY="<api-key>"
 ```
 
+#### Langfuse (non-default)
+
+Used both for `orcha evals run --langfuse` and for tracing Temporal
+workflows when `LANGFUSE_ENABLED=True`. Optional configuration:
+
+```bash
+export LANGFUSE_BASE_URL="<langfuse-endpoint>"
+export LANGFUSE_SECRET_KEY="<secret-api-key>"
+export LANGFUSE_PUBLIC_KEY="<public-api-key>"
+```
+
 #### Ollama (local/dev)
 
 ```bash
 export LLM="ollama/llama3.1"
 export OLLAMA_BASE_URL="http://localhost:11434/v1"
+```
+
+## Evaluations
+
+`orcha evals sync_dataset` downloads the eval dataset into a local cache once;
+`orcha evals run` reuses it for dataset evaluation and fails with a hint if it isn't there yet:
+
+```bash
+uv run orcha evals sync_dataset
+uv run orcha evals run --model "litellm/gpt-oss-20b"
+```
+
+By default, `orcha evals run` extracts and evaluates locally, writing a JSON
+summary per item plus the run's average score to `app/evals/eval_results` (override
+with `--output`). Pass `--langfuse` to sync the prompt, store the dataset, and
+report the experiment in Langfuse instead:
+
+```bash
+uv run orcha evals run --model "litellm/gpt-oss-20b" --langfuse
+```
+
+Use `--samples N` to evaluate a representative subset instead of the full
+dataset; items are sampled proportionally across each dataset resource type:
+
+```bash
+uv run orcha evals run --samples 20
 ```
 
 
@@ -156,6 +193,11 @@ export OLLAMA_BASE_URL="http://localhost:11434/v1"
 | `orcha tenants list`               | List registered tenants and their key IDs |
 | `orcha tenants add T KEY.pem`      | Register a tenant's public key            |
 | `orcha tenants token T KEY.pem`    | Sign a token for a tenant                 |
+| `orcha evals sync_dataset`         | Download the eval dataset into the local cache |
+| `orcha evals run`                  | Run a local metadata extraction evaluation, writing results to `app/evals/eval_results` |
+| `orcha evals run --output DIR`     | Same, writing results to `DIR` instead   |
+| `orcha evals run --langfuse`       | Extraction evaluation, and report the experiment in Langfuse |
+| `orcha evals run --samples N`      | Evaluate N items, sampled per category    |
 
 ## Database Migrations
 

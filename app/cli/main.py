@@ -17,6 +17,7 @@ import typer
 from alembic import command
 from alembic.config import Config
 
+from app.cli.evals import evals_app
 from app.cli.tenants import tenants_app
 from app.config import get_settings
 
@@ -31,6 +32,7 @@ run_app = typer.Typer(help="Run application processes.")
 app.add_typer(services_app, name="services")
 app.add_typer(run_app, name="run")
 app.add_typer(tenants_app, name="tenants")
+app.add_typer(evals_app, name="evals")
 
 
 @app.command()

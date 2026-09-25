@@ -4,6 +4,9 @@
 """Langfuse dataset management."""
 
 import json
+import math
+import random
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +50,8 @@ def load_local_dataset(dataset_root: Path, dataset_name: str) -> list[dict[str, 
 
         # Use first file listed
         pdf_path = dataset_root / file_paths[0]
+        if not pdf_path.exists():
+            continue
         pdf_parts = Path(file_paths[0]).parts
         category = pdf_parts[1] if len(pdf_parts) > 1 else "unknown"
 
@@ -64,6 +69,46 @@ def load_local_dataset(dataset_root: Path, dataset_name: str) -> list[dict[str, 
         )
 
     return items
+
+
+def sample_items(
+    items: list[dict[str, Any]], samples: int | None
+) -> list[dict[str, Any]]:
+    """Return a random subset, sampled proportionally by category."""
+    if samples is None or samples >= len(items):
+        return items
+
+    items_by_category = defaultdict(list)
+    for item in items:
+        items_by_category[item["input"]["category"]].append(item)
+
+    category_counts = {}
+    for category, category_items in items_by_category.items():
+        expected_count = samples * len(category_items) / len(items)
+        category_counts[category] = (
+            math.floor(expected_count),
+            expected_count,
+        )
+
+    categories_by_remainder = sorted(
+        category_counts.items(),
+        key=lambda x: x[1][1] % 1,
+        reverse=True,
+    )
+
+    remaining_samples = samples - sum(count[0] for _, count in categories_by_remainder)
+
+    selected = []
+    rng = random.Random()
+    for category, (count, _) in categories_by_remainder:
+        if remaining_samples > 0:
+            count += 1
+            remaining_samples -= 1
+
+        selected.extend(rng.sample(items_by_category[category], count))
+
+    rng.shuffle(selected)
+    return selected[:samples]
 
 
 def get_or_create_langfuse_dataset(
