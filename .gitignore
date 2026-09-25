@@ -81,3 +81,6 @@ tenants.json
 *.db-wal
 *.db-shm
 *.db-journal
+
+# Local eval results
+eval_results/

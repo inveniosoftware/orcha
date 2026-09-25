@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
@@ -321,26 +320,3 @@ def sync_dataset(
         "zenodo_record_id": state.get("latest_recid"),
     }
     return _materialize(target, cache, manifest, provenance), provenance
-
-
-def main() -> None:
-    """Run the dataset synchronization CLI."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", default=REPO)
-    parser.add_argument("--ref", default="main")
-    parser.add_argument("--cache", type=Path)
-    parser.add_argument("--target", type=Path)
-    args = parser.parse_args()
-
-    target, provenance = sync_dataset(
-        repo=args.repo,
-        ref=args.ref,
-        cache=args.cache,
-        target=args.target,
-    )
-    print(f"Dataset ready at {target}")
-    print(json.dumps(provenance, indent=2))
-
-
-if __name__ == "__main__":
-    main()
