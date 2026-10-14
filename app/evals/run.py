@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from rich.progress import Progress
+
 from app.activities.extract_metadata import extract_metadata_record
 from app.config import get_settings
 from app.extractors import get_extractor
@@ -127,7 +129,12 @@ async def run(
         raise FileNotFoundError(
             "Dataset is not downloaded. Run `orcha evals sync_dataset` first."
         )
-    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples, seed)
+
+    items = sample_items(
+        load_local_dataset(dataset_root, DATASET_NAME),
+        samples,
+        seed,
+    )
 
     client = None
     if use_langfuse:
@@ -139,68 +146,81 @@ async def run(
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
     async def task(*, item, **kwargs):
-        async with semaphore:
-            dataset_item = (
-                item
-                if client is None
-                else {
-                    "input": item.input,
-                    "expected_output": item.expected_output,
-                }
-            )
-            return await extraction_task(
-                dataset_item=dataset_item,
-                dataset_root=dataset_root,
-                extractor_name=extractor,
-            )
+        try:
+            async with semaphore:
+                dataset_item = (
+                    item
+                    if client is None
+                    else {
+                        "input": item.input,
+                        "expected_output": item.expected_output,
+                    }
+                )
+                return await extraction_task(
+                    dataset_item=dataset_item,
+                    dataset_root=dataset_root,
+                    extractor_name=extractor,
+                )
+        finally:
+            progress.advance(progress_task)
 
     effective_run_name = f"{extractor}__{settings.llm}"
 
-    if client is None:
-        outcomes = await asyncio.gather(
-            *(task(item=item) for item in items),
-            return_exceptions=True,
+    with Progress() as progress:
+        progress_task = progress.add_task(
+            "Running evaluations",
+            total=len(items),
         )
-        results: list[dict[str, Any]] = []
-        for item, outcome in zip(items, outcomes):
-            if isinstance(outcome, BaseException):
-                record_id = item["input"].get("record_id").strip("_")
-                logger.error(
-                    "Evaluation failed for %s: %s",
-                    record_id,
-                    outcome,
-                )
-            else:
-                results.append(outcome)
+        if client is None:
+            outcomes = await asyncio.gather(
+                *(task(item=item) for item in items),
+                return_exceptions=True,
+            )
+            results: list[dict[str, Any]] = []
+            for item, outcome in zip(items, outcomes):
+                if isinstance(outcome, BaseException):
+                    record_id = item["input"].get("record_id").strip("_")
+                    logger.error(
+                        "Evaluation failed for %s: %s",
+                        record_id,
+                        outcome,
+                    )
+                else:
+                    results.append(outcome)
 
-        output_path = save_local_results(
-            results,
-            results_dir or PROJECT_ROOT / "app/evals/eval_results",
-            extractor,
-            settings.llm,
+            output_path = save_local_results(
+                results,
+                results_dir or PROJECT_ROOT / "app/evals/eval_results",
+                extractor,
+                settings.llm,
+            )
+            print(f"Wrote {len(results)} results to {output_path}")
+            return results
+
+        prompt_ref = sync_extraction_prompt(client, prompt_name)
+        dataset_items = get_or_create_langfuse_dataset(
+            client,
+            DATASET_NAME,
+            items,
+            samples,
         )
-        print(f"Wrote {len(results)} results to {output_path}")
-        return results
 
-    prompt_ref = sync_extraction_prompt(client, prompt_name)
-    dataset_items = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
+        result = client.run_experiment(
+            name=effective_run_name,
+            description="Extract and evaluate document metadata",
+            data=dataset_items,
+            metadata={
+                "dataset_name": DATASET_NAME,
+                "model": settings.llm,
+                "extractor": extractor,
+                "prompt_name": prompt_ref["name"],
+                "prompt_version": str(prompt_ref.get("version")),
+                "pages": "1,2",
+            },
+            task=task,
+            evaluators=[item_summary_evaluator],
+            run_evaluators=[average_score_evaluator],
+        )
 
-    result = client.run_experiment(
-        name=effective_run_name,
-        description="Extract and evaluate document metadata",
-        data=dataset_items,
-        metadata={
-            "dataset_name": DATASET_NAME,
-            "model": settings.llm,
-            "extractor": extractor,
-            "prompt_name": prompt_ref["name"],
-            "prompt_version": str(prompt_ref.get("version")),
-            "pages": "1,2",
-        },
-        task=task,
-        evaluators=[item_summary_evaluator],
-        run_evaluators=[average_score_evaluator],
-    )
-
-    print(result.format())
-    return result
+        print(result.format())
+        return result
