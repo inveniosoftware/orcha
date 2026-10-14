@@ -10,6 +10,8 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+from rich.progress import Progress
+
 from app.activities.extract_metadata import extract_metadata_record
 from app.config import get_settings
 from app.extractors import get_extractor
@@ -185,19 +187,24 @@ async def run(
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
     async def extract(item: dict):
-        async with semaphore:
-            return await extraction_task(
-                dataset_item=item,
-                dataset_root=dataset_root,
-                extractor_name=extractor,
-            )
+        try:
+            async with semaphore:
+                return await extraction_task(
+                    dataset_item=item,
+                    dataset_root=dataset_root,
+                    extractor_name=extractor,
+                )
+        finally:
+            progress.advance(progress_task)
 
-    if use_langfuse:
-        results = _run_langfuse(
-            items, extract, extractor, prompt_name, samples, settings
-        )
-    else:
-        results = await _run_local(items, extract)
+    with Progress() as progress:
+        progress_task = progress.add_task("Running evaluations", total=len(items))
+        if use_langfuse:
+            results = _run_langfuse(
+                items, extract, extractor, prompt_name, samples, settings
+            )
+        else:
+            results = await _run_local(items, extract)
 
     if save_json:
         path = save_local_results(
