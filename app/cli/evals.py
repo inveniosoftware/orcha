@@ -65,6 +65,7 @@ def run(
     samples: int | None = typer.Option(
         None, "--samples", help="Sample this many items, proportionally per category."
     ),
+    seed: int = typer.Option(42, "--seed", help="Seed for the sampling."),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -88,6 +89,7 @@ def run(
                 prompt_name=prompt_name,
                 use_langfuse=use_langfuse,
                 samples=samples,
+                seed=seed,
                 results_dir=output,
                 cache=cache,
                 target=target,

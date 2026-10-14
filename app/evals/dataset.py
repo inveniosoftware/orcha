@@ -72,7 +72,9 @@ def load_local_dataset(dataset_root: Path, dataset_name: str) -> list[dict[str, 
 
 
 def sample_items(
-    items: list[dict[str, Any]], samples: int | None
+    items: list[dict[str, Any]],
+    samples: int | None,
+    seed: int = 42,
 ) -> list[dict[str, Any]]:
     """Return a random subset, sampled proportionally by category."""
     if samples is None or samples >= len(items):
@@ -99,7 +101,7 @@ def sample_items(
     remaining_samples = samples - sum(count[0] for _, count in categories_by_remainder)
 
     selected = []
-    rng = random.Random()
+    rng = random.Random(seed)
     for category, (count, _) in categories_by_remainder:
         if remaining_samples > 0:
             count += 1
@@ -115,31 +117,29 @@ def get_or_create_langfuse_dataset(
     langfuse: Any,
     dataset_name: str,
     dataset_items: list[dict[str, Any]],
+    samples: int | None = None,
 ) -> Any:
-    """Get existing Langfuse dataset if it exists. If not, create and populate it."""
+    """Get or create a Langfuse dataset and return the requested items."""
     try:
         langfuse_dataset = langfuse.get_dataset(name=dataset_name)
-        langfuse_dataset_items = list(langfuse_dataset.items)
-        if langfuse_dataset_items:
-            return langfuse_dataset_items
+        existing_ids = {item.id for item in langfuse_dataset.items}
     except NotFoundError:
-        pass  # expected on first run, it will be created below
-    except Exception as e:
-        print(f"ERROR GETTING LANGFUSE DATASET: {e!r}")
-        raise
+        langfuse.create_dataset(name=dataset_name, description="Evaluation Dataset")
+        existing_ids = set()
 
-    # Populate dataset if it doesn't exist yet in Langfuse
-    dataset = langfuse.create_dataset(
-        name=dataset_name, description="Evaluation Dataset"
-    )
     for item in dataset_items:
-        item_id = item.get("id") or item["input"].get("record_id")
+        if item["id"] not in existing_ids:
+            langfuse.create_dataset_item(
+                dataset_name=dataset_name,
+                id=item["id"],
+                input=item["input"],
+                expected_output=item["expected_output"],
+            )
 
-        langfuse.create_dataset_item(
-            dataset_name=dataset_name,
-            id=item_id,
-            input=item["input"],
-            expected_output=item["expected_output"],
-        )
-    dataset = langfuse.get_dataset(name=dataset_name)
-    return list(dataset.items)
+    langfuse_dataset = langfuse.get_dataset(name=dataset_name)
+
+    if samples is None:
+        return list(langfuse_dataset.items)
+
+    items_by_id = {item.id: item for item in langfuse_dataset.items}
+    return [items_by_id[item["id"]] for item in dataset_items]

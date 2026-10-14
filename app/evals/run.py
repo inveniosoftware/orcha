@@ -112,6 +112,7 @@ async def run(
     prompt_name: str = "prompt",
     use_langfuse: bool = False,
     samples: int | None = None,
+    seed: int = 42,
     results_dir: Path | None = None,
     cache: Path | None = None,
     target: Path | None = None,
@@ -126,7 +127,7 @@ async def run(
         raise FileNotFoundError(
             "Dataset is not downloaded. Run `orcha evals sync_dataset` first."
         )
-    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples)
+    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples, seed)
 
     client = None
     if use_langfuse:
@@ -182,7 +183,7 @@ async def run(
         return results
 
     prompt_ref = sync_extraction_prompt(client, prompt_name)
-    dataset_items = get_or_create_langfuse_dataset(client, DATASET_NAME, items)
+    dataset_items = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
 
     result = client.run_experiment(
         name=effective_run_name,

@@ -171,6 +171,7 @@ uv run orcha evals run --model "litellm/gpt-oss-20b" --langfuse
 
 Use `--samples N` to evaluate a representative subset instead of the full
 dataset; items are sampled proportionally across each dataset resource type:
+Sampling is deterministic by default, so repeated runs with the same sample size and unchanged dataset select the same subset.
 
 ```bash
 uv run orcha evals run --samples 20
