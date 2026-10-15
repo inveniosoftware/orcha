@@ -62,6 +62,11 @@ def run(
         "--langfuse",
         help="Store and report the experiment in Langfuse.",
     ),
+    save_json: bool = typer.Option(
+        False,
+        "--save-json",
+        help="Save per-item evaluation results to a local JSON file.",
+    ),
     samples: int | None = typer.Option(
         None, "--samples", help="Sample this many items, proportionally per category."
     ),
@@ -88,6 +93,7 @@ def run(
                 extractor=extractor,
                 prompt_name=prompt_name,
                 use_langfuse=use_langfuse,
+                save_json=save_json,
                 samples=samples,
                 seed=seed,
                 results_dir=output,

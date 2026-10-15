@@ -36,6 +36,7 @@ def test_run_evals_sets_model_and_passes_options(monkeypatch):
         extractor="pdfplumber",
         prompt_name="prompt",
         use_langfuse=False,
+        save_json=False,
         samples=None,
         seed=42,
         results_dir=None,
@@ -45,7 +46,7 @@ def test_run_evals_sets_model_and_passes_options(monkeypatch):
 
 
 def test_run_evals_can_enable_langfuse(monkeypatch):
-    """`orcha evals run --langfuse` enables Langfuse reporting."""
+    """`--langfuse` enables Langfuse without local JSON saving."""
     fake_run = Mock()
 
     monkeypatch.setattr("app.cli.evals.run_evaluation", fake_run)
@@ -58,6 +59,30 @@ def test_run_evals_can_enable_langfuse(monkeypatch):
         extractor="pdfplumber",
         prompt_name="prompt",
         use_langfuse=True,
+        save_json=False,
+        samples=None,
+        seed=42,
+        results_dir=None,
+        cache=None,
+        target=None,
+    )
+
+
+def test_run_evals_can_enable_langfuse_and_save_json(monkeypatch):
+    """`--langfuse --save-json` enables both Langfuse and local JSON saving."""
+    fake_run = Mock()
+
+    monkeypatch.setattr("app.cli.evals.run_evaluation", fake_run)
+    monkeypatch.setattr("app.cli.evals.asyncio.run", lambda coro: None)
+
+    result = runner.invoke(app, ["evals", "run", "--langfuse", "--save-json"])
+
+    assert result.exit_code == 0
+    fake_run.assert_called_once_with(
+        extractor="pdfplumber",
+        prompt_name="prompt",
+        use_langfuse=True,
+        save_json=True,
         samples=None,
         seed=42,
         results_dir=None,

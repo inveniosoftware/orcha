@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 CERN.
+# SPDX-License-Identifier: MIT
+
+variables:
+  KUBERNETES_IMAGE_PULL_POLICY: "if-not-present"
+
+stages:
+  - evals
+
+evals:
+  stage: evals
+  image: registry.cern.ch/docker.io/astral/uv:python3.14-bookworm
+  before_script:
+    - uv sync --locked --no-cache --extra langfuse
+
+  script:
+    - uv run orcha evals sync_dataset
+
+    # One timestamp per run, used for every output location
+    - |
+      set -eo pipefail
+      run_id="$(date -u +'%Y-%m-%dT%H-%M-%S')"
+      out="app/evals/eval_results/$run_id"
+      mkdir -p "$out"
+
+      # Run evaluation
+      uv run orcha evals run \
+        --model "litellm/gpt-oss-20b" \
+        --langfuse \
+        --save-json \
+        --output "$out" \
+        | tee "$out/results.md"
+
+      # Fail if the eval produced no scores
+      grep -q "Average Scores:" "$out/results.md"
+
+      # Compare with previous report and save
+      git clone --depth 1 \
+        "https://oauth2:${EVAL_RESULTS_TOKEN}@${EVAL_RESULTS_REPO#https://}" \
+        eval-results-repo
+
+      results_dir="eval-results-repo/results"
+      mkdir -p "$results_dir"
+
+      # Latest previous run folder
+      previous=$(ls -d "$results_dir"/*/ 2>/dev/null | sort | tail -n 1 || true)
+
+      {
+        if [ -n "$previous" ] && [ -f "${previous}report.md" ]; then
+          uv run python app/evals/compare_results.py "${previous}report.md" "$out/results.md"
+        else
+          echo "No previous results, skipping comparison"
+        fi
+
+        printf '\n\n---\n\n'
+        cat "$out/results.md"
+      } > "$out/report.md"
+
+      # Save report + JSON in a timestamped folder in the results repo
+      mkdir -p "$results_dir/$run_id"
+      cp "$out/report.md" "$out"/*.json "$results_dir/$run_id/"
+
+      cd eval-results-repo
+      git config user.name "Orcha CI"
+      git config user.email "orcha-ci@gitlab.cern.ch"
+      git add results
+      git commit -m "Add eval results: $run_id"
+      git push
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'

@@ -62,7 +62,7 @@ def load_local_dataset(dataset_root: Path, dataset_name: str) -> list[dict[str, 
                     "record_id": meta_path.stem,
                     "category": category,
                     "metadata_file": str(meta_path.relative_to(metadata_dir)),
-                    "pdf_path": str(pdf_path),
+                    "pdf_path": file_paths[0],
                 },
                 "expected_output": _expected_output_from_metadata(metadata),
             }

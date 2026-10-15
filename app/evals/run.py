@@ -9,7 +9,6 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from app.activities.extract_metadata import extract_metadata_record
 from app.config import get_settings
@@ -87,7 +86,7 @@ async def extraction_task(
 ):
     """Extract text, run the agent, and build evaluator comparison data."""
     input_data = dataset_item.get("input")
-    pdf_path = Path(input_data.get("pdf_path"))
+    pdf_path = dataset_root / input_data["pdf_path"]
     expected = dataset_item.get("expected_output")
     record_id = input_data.get("record_id") or pdf_path.stem
 
@@ -107,88 +106,51 @@ async def extraction_task(
     }
 
 
-async def run(
-    extractor: str = "pdfplumber",
-    prompt_name: str = "prompt",
-    use_langfuse: bool = False,
-    samples: int | None = None,
-    seed: int = 42,
-    results_dir: Path | None = None,
-    cache: Path | None = None,
-    target: Path | None = None,
-):
-    """Run extraction and evaluation experiment."""
+def _resolve_dataset_root(cache: Path | None, target: Path | None) -> Path:
     cache = cache or Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    dataset_root = (target or cache / "orcha-eval-dataset") / "dataset"
-
-    state_path = dataset_root / ".dataset-state.json"
-    metadata_dir = dataset_root / "metadata"
-    if not state_path.exists() or not metadata_dir.exists():
+    root = (target or cache / "orcha-eval-dataset") / "dataset"
+    if not (root / ".dataset-state.json").exists() or not (root / "metadata").exists():
         raise FileNotFoundError(
             "Dataset is not downloaded. Run `orcha evals sync_dataset` first."
         )
-    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples, seed)
+    return root
 
-    client = None
-    if use_langfuse:
-        from langfuse import get_client
 
-        client = get_client()
+async def _run_local(items, extract) -> list[dict]:
+    outcomes = await asyncio.gather(
+        *(extract(item) for item in items),
+        return_exceptions=True,
+    )
+    results = []
+    for item, outcome in zip(items, outcomes):
+        if isinstance(outcome, BaseException):
+            record_id = item["input"].get("record_id", "").strip("_")
+            logger.error("Evaluation failed for %s: %s", record_id, outcome)
+        else:
+            results.append(outcome)
+    return results
 
-    settings = get_settings()
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-    async def task(*, item, **kwargs):
-        async with semaphore:
-            dataset_item = (
-                item
-                if client is None
-                else {
-                    "input": item.input,
-                    "expected_output": item.expected_output,
-                }
-            )
-            return await extraction_task(
-                dataset_item=dataset_item,
-                dataset_root=dataset_root,
-                extractor_name=extractor,
-            )
+def _run_langfuse(
+    items, extract, extractor, prompt_name, samples, settings
+) -> list[dict]:
+    from langfuse import get_client
 
-    effective_run_name = f"{extractor}__{settings.llm}"
-
-    if client is None:
-        outcomes = await asyncio.gather(
-            *(task(item=item) for item in items),
-            return_exceptions=True,
-        )
-        results: list[dict[str, Any]] = []
-        for item, outcome in zip(items, outcomes):
-            if isinstance(outcome, BaseException):
-                record_id = item["input"].get("record_id").strip("_")
-                logger.error(
-                    "Evaluation failed for %s: %s",
-                    record_id,
-                    outcome,
-                )
-            else:
-                results.append(outcome)
-
-        output_path = save_local_results(
-            results,
-            results_dir or PROJECT_ROOT / "app/evals/eval_results",
-            extractor,
-            settings.llm,
-        )
-        print(f"Wrote {len(results)} results to {output_path}")
-        return results
-
+    client = get_client()
     prompt_ref = sync_extraction_prompt(client, prompt_name)
-    dataset_items = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
+    results: list[dict] = []
 
-    result = client.run_experiment(
-        name=effective_run_name,
+    async def task(*, item, **_):
+        outcome = await extract(
+            {"input": item.input, "expected_output": item.expected_output}
+        )
+        results.append(outcome)
+        return outcome
+
+    experiment = client.run_experiment(
+        name=f"{extractor}__{settings.llm}",
         description="Extract and evaluate document metadata",
-        data=dataset_items,
+        data=get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples),
         metadata={
             "dataset_name": DATASET_NAME,
             "model": settings.llm,
@@ -201,6 +163,59 @@ async def run(
         evaluators=[item_summary_evaluator],
         run_evaluators=[average_score_evaluator],
     )
+    print(experiment.format())
+    return results
 
-    print(result.format())
-    return result
+
+async def run(
+    extractor: str = "pdfplumber",
+    prompt_name: str = "prompt",
+    use_langfuse: bool = False,
+    save_json: bool = False,
+    samples: int | None = None,
+    seed: int = 42,
+    results_dir: Path | None = None,
+    cache: Path | None = None,
+    target: Path | None = None,
+):
+    """Run extraction and evaluation experiment."""
+    dataset_root = _resolve_dataset_root(cache, target)
+    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples, seed)
+    settings = get_settings()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+    async def extract(item: dict):
+        async with semaphore:
+            return await extraction_task(
+                dataset_item=item,
+                dataset_root=dataset_root,
+                extractor_name=extractor,
+            )
+
+    if use_langfuse:
+        results = _run_langfuse(
+            items, extract, extractor, prompt_name, samples, settings
+        )
+    else:
+        results = await _run_local(items, extract)
+
+    if save_json:
+        path = save_local_results(
+            results,
+            results_dir or PROJECT_ROOT / "app/evals/eval_results",
+            extractor,
+            settings.llm,
+        )
+        print(f"Wrote {len(results)} results to {path}")
+
+    print(f"{extractor} / {settings.llm}")
+    scores = []
+    for result in results:
+        score = result["comparison"]["average_score"]
+        scores.append(score)
+        name = result["pdf_filename"].split("__")[0]
+        print(f"  {name}: {score:.4f}")
+    average = sum(scores) / len(scores) if scores else 0.0
+    print(f"Average: {average:.4f} ({len(results)}/{len(items)} items)")
+
+    return results
