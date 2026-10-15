@@ -64,11 +64,11 @@ def build_agent(llm: str, output_type: type[T], instructions: str) -> Agent[None
             model,
             instructions=[_REASONING_LOW, instructions, _JSON_ONLY],
             output_type=PromptedOutput(output_type),
-            output_retries=_OUTPUT_RETRIES,
+            retries=_OUTPUT_RETRIES,
         )
     return Agent[None, T](
         model,
         instructions=instructions,
         output_type=output_type,
-        output_retries=_OUTPUT_RETRIES,
+        retries=_OUTPUT_RETRIES,
     )

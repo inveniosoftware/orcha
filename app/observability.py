@@ -3,7 +3,7 @@
 
 """Observability helpers."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from app.config import get_settings
@@ -24,7 +24,7 @@ def propagate_langfuse_context(
     context: WorkflowContext,
     *,
     trace_name: str,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Propagate workflow context to Langfuse at activity runtime."""
     if not get_settings().langfuse_enabled:
         yield
