@@ -240,6 +240,12 @@ uv version --bump patch   # or: minor, major
 
 Then set the same `X.Y.Z` in `charts/orcha/Chart.yaml`, in both `version` and `appVersion`.
 
+### 2. Lock dependencies
+
+You can lock dependencies via `uv lock --upgrade`, or selectively update a specific package with `uv lock --upgrade-package <package-name>`
+
+Verify that the updated `uv.lock` has the updated dependencies.
+
 ### 2. Update the changelog
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/). Every `feat:`/`fix:`/`refactor:` commit should already have a bullet under `## [Unreleased]`. At release time, promote that section:

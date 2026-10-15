@@ -76,3 +76,6 @@ python-version = "3.14"
 
 [tool.ty.src]
 include = ["app", "tests"]
+
+[tool.uv]
+exclude-newer = "3 days"

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Features
+
+- *(funding)* Add retry policy
+- Add cli for evals
+  - Reuse app metadata extraction flow in evals
+
+### Fixes
+
+- *(evals)* Improve dataset synchronization
+- Replace OUTPUT_RETRIES with RETRIES due to bump in pydantic-ai
+
+
 ## [0.6.0] - 2026-09-08
 
 ### Features
