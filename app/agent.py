@@ -60,13 +60,13 @@ def build_agent(llm: str, output_type: type[T], instructions: str) -> Agent[None
         settings=OpenAIChatModelSettings(**cfg.model),
     )
     if cfg.output == "prompted":
-        return Agent[None, T](
+        return Agent[None, T](  # ty: ignore[no-matching-overload]
             model,
             instructions=[_REASONING_LOW, instructions, _JSON_ONLY],
             output_type=PromptedOutput(output_type),
             output_retries=_OUTPUT_RETRIES,
         )
-    return Agent[None, T](
+    return Agent[None, T](  # ty: ignore[no-matching-overload]
         model,
         instructions=instructions,
         output_type=output_type,

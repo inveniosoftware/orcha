@@ -4,7 +4,6 @@
 """Tests for the compare_metadata activity."""
 
 import asyncio
-import json
 
 import pytest
 
@@ -231,11 +230,31 @@ def test_build_pairs_scalar_fields():
     )
     current = CurrentMetadata(title="Current Title")
 
-    pairs = json.loads(_build_pairs(suggested, current))
+    pairs, identical_fields = _build_pairs(suggested, current)
 
     assert pairs == {
         "title": {"suggested": "Suggested Title", "current": "Current Title"},
         "doi": {"suggested": "10.1234/example.5678", "current": None},
+    }
+    assert identical_fields == {}
+
+
+def test_build_pairs_skips_identical_scalar_fields():
+    """A scalar field that already matches is reported without asking the LLM."""
+    suggested = MetadataSuggestions(
+        suggestions=[
+            TitleSuggestion(value="Suggested Title"),
+            DoiSuggestion(value="10.1234/example.5678"),
+        ]
+    )
+    current = CurrentMetadata(title="Suggested Title", doi="10.1234/example.5678")
+
+    pairs, identical_fields = _build_pairs(suggested, current)
+
+    assert pairs == {}
+    assert identical_fields == {
+        "title": "Suggested Title",
+        "doi": "10.1234/example.5678",
     }
 
 
@@ -246,7 +265,7 @@ def test_build_pairs_aligns_list_fields():
     )
     current = CurrentMetadata(creators=[Creator(name="Doe, Jane")])
 
-    pairs = json.loads(_build_pairs(suggested, current))
+    pairs, _ = _build_pairs(suggested, current)
 
     assert pairs["creators"] == [
         {
@@ -301,7 +320,9 @@ def test_to_comparisons():
     request = CompareMetadataRequest(
         suggested_metadata=suggested_metadata, current_metadata=current_metadata
     )
-    pairs = _build_pairs(request.suggested_metadata, request.current_metadata)
+    pairs, identical_fields = _build_pairs(
+        request.suggested_metadata, request.current_metadata
+    )
 
     mocked_output = ComparedMetadata.model_validate(
         {
@@ -311,7 +332,7 @@ def test_to_comparisons():
             "differences ('bases' vs 'basis') can be ignored.",
             "creators": "Creator lists match; discrepancies are missing affiliation and"
             " one author not present in current; acceptable.",
-            "doi": "DOI matches the one in the extraction.",
+            "doi": None,  # DOI matches exactly, so it's never sent to the LLM
             "publication_date": "Suggested date '2014-07-17' is more precise than "
             "'2014-07' – the current date provides only year "
             "and month, but refers to the same document.",
@@ -327,7 +348,7 @@ def test_to_comparisons():
         }
     )
 
-    result = mocked_output.to_comparisons(json.loads(pairs))
+    result = mocked_output.to_comparisons(pairs, identical_fields)
     # Scalar field: Title
     assert result.comparisons[0].model_dump() == {
         "field": "title",
@@ -335,6 +356,14 @@ def test_to_comparisons():
         "for a typo.",
         "suggested": "A title that matches",
         "current": "A title that matcches",
+    }
+
+    # Scalar field already identical: DOI, skipped from the LLM
+    assert result.comparisons[3].model_dump() == {
+        "field": "doi",
+        "rationale": "Suggested and current values match.",
+        "suggested": "10.1234/example.5678",
+        "current": "10.1234/example.5678",
     }
 
     # Scalar field present in only one metadata set: Copyright
