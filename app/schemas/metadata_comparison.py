@@ -210,7 +210,11 @@ class ComparedMetadata(BaseModel):
     )
     decision: str = Field(description="Explanation of the describes_file decision")
 
-    def to_comparisons(self, pairs: dict[str, dict]) -> MetadataComparisons:
+    def to_comparisons(
+        self,
+        pairs: dict[str, dict],
+        identical_fields: dict[str, str] | None = None,
+    ) -> MetadataComparisons:
         """Build the typed comparisons, dropping null/empty fields."""
 
         def get_clean_values(
@@ -226,7 +230,16 @@ class ComparedMetadata(BaseModel):
 
         comparisons: list[MetadataComparison] = []
         for field in SCALAR_FIELDS:
-            if rationale := getattr(self, field):
+            if value := (identical_fields or {}).get(field):
+                comparisons.append(
+                    MetadataComparison(
+                        field=field,
+                        rationale="Suggested and current values match.",
+                        suggested=value,
+                        current=value,
+                    )
+                )
+            elif rationale := getattr(self, field):
                 pair = pairs[field]
                 comparisons.append(
                     MetadataComparison(

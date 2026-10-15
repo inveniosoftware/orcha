@@ -76,7 +76,15 @@ def _align(suggested_metadata: list, current_metadata: list) -> list[dict]:
     ]
 
 
-def _build_pairs(suggested: MetadataSuggestions, current: CurrentMetadata) -> str:
+def _build_pairs(
+    suggested: MetadataSuggestions, current: CurrentMetadata
+) -> tuple[dict, dict[str, str]]:
+    """Build pairs to pass to the LLM.
+
+    Returns (pairs, identical_fields): `pairs` only contains fields that
+    actually need the LLM's judgement, and `identical_fields` maps field
+    name to the shared value for scalr fields where suggested == current.
+    """
     scalar_fields: dict[str, str] = {}
     list_fields: dict[str, list] = {}
     for s in suggested.suggestions:
@@ -86,21 +94,26 @@ def _build_pairs(suggested: MetadataSuggestions, current: CurrentMetadata) -> st
             scalar_fields[s.field] = s.value
 
     pairs = {}
+    identical_fields: dict[str, str] = {}
     for field in SCALAR_FIELDS:
         suggested_field = scalar_fields.get(field)
         current_field = getattr(current, field)
-        if suggested_field or current_field:
-            pairs[field] = {
-                "suggested": suggested_field or None,
-                "current": current_field or None,
-            }
+        if not suggested_field and not current_field:
+            continue
+        if suggested_field and suggested_field == current_field:
+            identical_fields[field] = suggested_field
+            continue
+        pairs[field] = {
+            "suggested": suggested_field or None,
+            "current": current_field or None,
+        }
     for field in LIST_FIELDS:
         suggested_field = list_fields.get(field, [])
         current_field = getattr(current, field)
         if suggested_field or current_field:
             pairs[field] = _align(suggested_field, current_field)
 
-    return json.dumps(pairs, indent=1, ensure_ascii=False)
+    return pairs, identical_fields
 
 
 @activity.defn
@@ -117,10 +130,10 @@ async def compare_metadata_with_llm(
             decision="File does not have enough text for the comparison.",
         )
     current_metadata = request.current_metadata
-    pairs = _build_pairs(suggested_metadata, current_metadata)
+    pairs, identical_fields = _build_pairs(suggested_metadata, current_metadata)
 
     agent = build_agent(get_settings().llm, ComparedMetadata, INSTRUCTIONS)
     with propagate_langfuse_context(context, trace_name="compare_metadata"):
-        result = await agent.run(pairs)
+        result = await agent.run(json.dumps(pairs, indent=1, ensure_ascii=False))
 
-    return result.output.to_comparisons(json.loads(pairs))
+    return result.output.to_comparisons(pairs, identical_fields)
