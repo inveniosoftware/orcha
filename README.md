@@ -159,6 +159,8 @@ export OLLAMA_BASE_URL="http://localhost:11434/v1"
 uv run orcha evals sync_dataset
 uv run orcha evals run --model "litellm/gpt-oss-20b"
 ```
+**Runtime:** Dataset synchronization can take up to 3 minutes. Evaluating the full
+dataset of 181 items can take up to 15 minutes. Actual runtimes may vary.
 
 By default, `orcha evals run` extracts and evaluates locally, writing a JSON
 summary per item plus the run's average score to `app/evals/eval_results` (override
