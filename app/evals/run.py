@@ -87,7 +87,7 @@ async def extraction_task(
 ):
     """Extract text, run the agent, and build evaluator comparison data."""
     input_data = dataset_item.get("input")
-    pdf_path = Path(input_data.get("pdf_path"))
+    pdf_path = dataset_root / input_data["pdf_path"]
     expected = dataset_item.get("expected_output")
     record_id = input_data.get("record_id") or pdf_path.stem
 

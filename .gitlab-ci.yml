@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: 2026 CERN.
+# SPDX-License-Identifier: MIT
+
+stages:
+  - evals
+
+evals:
+  stage: evals
+  image: ghcr.io/astral-sh/uv:python3.14-bookworm
+
+  before_script:
+    - uv sync --locked --no-cache --extra langfuse
+
+  script:
+    - uv run orcha evals sync_dataset
+    - mkdir -p app/evals/eval_results
+
+    # Run evaluation
+    - |
+      set -o pipefail
+      uv run orcha evals run \
+        --model "litellm/gpt-oss-20b" \
+        --langfuse \
+        | tee app/evals/eval_results/results.md
+
+    # Fail if the eval produced no scores
+    - grep -q "Average Scores:" app/evals/eval_results/results.md
+
+    # Compare with previous report and save
+    - |
+      git clone --depth 1 \
+        "https://oauth2:${EVAL_RESULTS_TOKEN}@${EVAL_RESULTS_REPO#https://}" \
+        orcha-evals-results
+
+      out=app/evals/eval_results
+      results_dir="orcha-evals-results/results"
+      mkdir -p "$results_dir"
+
+      # Latest previous report
+      previous=$(ls "$results_dir"/*.md | sort | tail -n 1 || true)
+
+      {
+        if [ -n "$previous" ]; then
+          uv run python app/evals/compare_results.py "$previous" "$out/results.md"
+        else
+          echo "No previous results, skipping comparison"
+        fi
+
+        printf '\n\n---\n\n'
+        cat "$out/results.md"
+      } > "$out/final_report.md"
+
+      filename="$(date -u +'%Y-%m-%dT%H-%M-%S').md"
+      cp "$out/final_report.md" "$results_dir/$filename"
+
+      cd eval-results-repo
+      git config user.name "Orcha CI"
+      git config user.email "orcha-ci@gitlab.cern.ch"
+      git add results
+      git commit -m "Add eval results: $filename"
+      git push
+
+  artifacts:
+    when: always
+    paths:
+      - app/evals/eval_results/
+    expire_in: 1 month
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
