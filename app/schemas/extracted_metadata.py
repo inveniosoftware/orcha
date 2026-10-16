@@ -24,6 +24,11 @@ class FunderEnum(str, Enum):
     NHMRC = "National Health and Medical Research Council"
     ANR = "National Agency for Research"
     ARC = "Australian Research Council"
+    AF = "Academy of Finland"
+    WT = "Wellcome Trust"
+    FFWF = "FWF Austrian Science Fund"
+    STRCT = "Scientific and Technological Research Council of Turkey"
+    SFI = "Science Foundation Ireland"
 
 
 FUNDER_ROR_IDS = {
@@ -37,6 +42,11 @@ FUNDER_ROR_IDS = {
     FunderEnum.NHMRC: "011kf5r70",
     FunderEnum.ANR: "00rbzpz17",
     FunderEnum.ARC: "05mmh0f86",
+    FunderEnum.AF: "05k73zm37",
+    FunderEnum.WT: "029chgv08",
+    FunderEnum.FFWF: "013tf3c58",
+    FunderEnum.STRCT: "04w9kkr77",
+    FunderEnum.SFI: "0271asj38",
 }
 
 FUNDER_NAMES_BY_ROR_ID = {
