@@ -50,31 +50,82 @@ def _entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     entries = []
     paths = set()
     for record_id, record in records.items():
-        for field in ("document", "metadata"):
-            entry = record.get(field)
-            if not isinstance(entry, dict):
-                raise DatasetSyncError(f"{record_id}: missing {field} entry")
-            relative = PurePosixPath(entry.get("path", ""))
+        document = record.get("document")
+        metadata = record.get("metadata")
+        source = document.get("source", "dataset")
+
+        if source not in ("dataset", "remote"):
+            raise DatasetSyncError(
+                f"{record_id}: unsupported document source {source!r}"
+            )
+
+        if source == "remote" and not document.get("url"):
+            raise DatasetSyncError(
+                f"Missing document URL for remote record '{record_id}'"
+            )
+
+        for item in (document, metadata):
+            relative = PurePosixPath(item.get("path", ""))
             if (
                 relative.is_absolute()
                 or ".." in relative.parts
                 or relative.parts[:1] not in (("files",), ("metadata",))
             ):
                 raise DatasetSyncError(f"{record_id}: invalid path {relative}")
-            checksum = entry.get("sha256")
-            size = entry.get("size")
+            checksum = item.get("sha256")
+            size = item.get("size")
             if not isinstance(checksum, str) or not re.fullmatch(
                 r"[0-9a-f]{64}", checksum
             ):
                 raise DatasetSyncError(f"{record_id}: invalid SHA-256")
-            if not isinstance(size, int) or size < 0:
+            if not isinstance(size, int) or isinstance(size, bool) or size < 0:
                 raise DatasetSyncError(f"{record_id}: invalid size")
             path = relative.as_posix()
             if path in paths:
                 raise DatasetSyncError(f"Duplicate manifest path: {path}")
             paths.add(path)
-            entries.append({"path": path, "sha256": checksum, "size": size})
+
+            entry = {"path": path, "sha256": checksum, "size": size}
+            if item is document:
+                entry["source"] = source
+                if source == "remote":
+                    entry["url"] = document["url"]
+            entries.append(entry)
+
     return sorted(entries, key=lambda entry: entry["path"])
+
+
+def _fetch_external_document(
+    document: dict[str, Any],
+    cache: Path,
+    record_id: str,
+) -> bool:
+    entry = {
+        "path": document["path"],
+        "sha256": document["sha256"],
+        "size": document["size"],
+    }
+    object_path = _object_path(cache, entry["sha256"])
+
+    if _valid_object(object_path, entry):
+        return True
+
+    url = document["url"]
+    _progress(f"Fetching remote document for {record_id}: {url}")
+
+    try:
+        response = _get(url, stream=True)
+        try:
+            with response.raw as source:
+                source.decode_content = True
+                _store_object(source, cache, entry)
+        finally:
+            response.close()
+    except (DatasetSyncError, requests.RequestException) as error:
+        _progress(f"Warning: skipping document for '{record_id}' ({url}): {error}")
+        return False
+
+    return True
 
 
 def _headers(token: str | None = None) -> dict[str, str]:
@@ -148,7 +199,11 @@ def _store_object(
 
     if size != entry["size"] or digest.hexdigest() != entry["sha256"]:
         temporary.unlink(missing_ok=True)
-        raise DatasetSyncError(f"Hash or size mismatch for {entry['path']}")
+        raise DatasetSyncError(
+            f"Hash or size mismatch for {entry['path']}: "
+            f"expected sha256 {entry['sha256']} ({entry['size']} bytes), "
+            f"got {digest.hexdigest()} ({size} bytes)"
+        )
     temporary.replace(destination)
     return destination
 
@@ -171,7 +226,8 @@ def _seed_archive(
     with zipfile.ZipFile(archive_path) as archive:
         if archive.read("manifest.json") != manifest_bytes:
             raise DatasetSyncError("Archive manifest differs from Zenodo manifest")
-        for entry in _missing(cache, entries):
+        local_entries = [entry for entry in entries if entry.get("source") != "remote"]
+        for entry in _missing(cache, local_entries):
             try:
                 with archive.open(entry["path"]) as source:
                     _progress(f"Caching {entry['path']} from Zenodo archive")
@@ -223,7 +279,8 @@ def _seed_zenodo(
     if _sha256_bytes(published_manifest) != state["manifest_sha256"]:
         raise DatasetSyncError("Zenodo manifest does not match .zenodo-record.json")
     entries = _entries(json.loads(published_manifest))
-    if not _missing(cache, entries):
+    local_entries = [entry for entry in entries if entry.get("source") != "remote"]
+    if not _missing(cache, local_entries):
         return
 
     archive_path = cache / "tmp" / state["archive"]
@@ -246,22 +303,23 @@ def _fetch_current_objects(
     token: str | None,
 ) -> None:
     for entry in _missing(cache, _entries(manifest)):
+        if entry.get("source") == "remote":
+            continue
         _progress(f"Fetching {entry['path']} from GitHub")
         path = quote(entry["path"], safe="/")
         base = GITHUB_MEDIA if entry["path"].startswith("files/") else GITHUB_RAW
-        response = _get(
+        with _get(
             f"{base}/{repo}/{commit}/{path}",
             token=token,
             stream=True,
             allow_not_found=True,
-        )
-        if response.status_code == 404:
-            _progress(f"GET {response.url} failed with 404")
-            response.close()
-            continue
-        with response.raw as source:
-            source.decode_content = True
-            _store_object(source, cache, entry)
+        ) as response:
+            if response.status_code == 404:
+                _progress(f"GET {response.url} failed with 404")
+                continue
+            with response.raw as source:
+                source.decode_content = True
+                _store_object(source, cache, entry)
 
 
 def _materialize(
@@ -278,15 +336,9 @@ def _materialize(
 
     entries = _entries(manifest)
     missing_paths = {entry["path"] for entry in _missing(cache, entries)}
-    skipped_paths = set()
-    for record in manifest["records"].values():
-        record_paths = {
-            record["document"]["path"],
-            record["metadata"]["path"],
-        }
-        if record_paths & missing_paths:
-            skipped_paths.update(record_paths)
-    entries = [entry for entry in entries if entry["path"] not in skipped_paths]
+
+    entries = [entry for entry in entries if entry["path"] not in missing_paths]
+
     current_paths = {entry["path"] for entry in entries}
     previous_paths = set(previous.get("managed_paths", []))
     for stale in sorted(previous_paths - current_paths):
@@ -299,21 +351,13 @@ def _materialize(
         destination = target / entry["path"]
         source = _object_path(cache, entry["sha256"])
         destination.parent.mkdir(parents=True, exist_ok=True)
-        replace_managed_link = (
-            destination.is_symlink() and entry["path"] in previous_paths
-        )
         if destination.exists() or destination.is_symlink():
-            if (
-                entry["path"] in previous_paths
-                and not destination.is_symlink()
-                and destination.is_file()
-                and destination.samefile(source)
-            ):
-                continue
-            if not replace_managed_link:
+            if entry["path"] not in previous_paths:
                 raise DatasetSyncError(
                     f"Refusing to replace unmanaged file: {destination}"
                 )
+            if not destination.is_symlink() and destination.samefile(source):
+                continue
         _progress(f"Hard-linking {entry['path']}")
         try:
             with tempfile.TemporaryDirectory(dir=destination.parent) as temporary_dir:
@@ -337,6 +381,7 @@ def sync_dataset(
     cache: Path | None = None,
     target: Path | None = None,
     zenodo_base: str = ZENODO,
+    ignore_zenodo_errors: bool = False,
 ) -> tuple[Path, dict[str, Any]]:
     """Synchronize one Git commit through the Zenodo-backed object cache."""
     cache = (
@@ -354,16 +399,45 @@ def sync_dataset(
     _progress("Fetching manifest.json")
     manifest_bytes = _get(f"{raw_base}/manifest.json", token=token).content
     manifest = json.loads(manifest_bytes)
-    _entries(manifest)
-    resp = _get(f"{raw_base}/.zenodo-record.json", token=token, allow_not_found=True)
-    if resp.status_code == 404:
-        state = {}
-        _progress("Zenodo dataset not found; fetching from GitHub")
-    else:
-        state = resp.json()
-        _seed_zenodo(cache, state, zenodo_base)
+    entries = _entries(manifest)  # also validates the manifest
 
+    # Reuse verified cache objects; fetch missing objects from Zenodo.
+    state: dict[str, Any] = {}
+    local_entries = [entry for entry in entries if entry.get("source") != "remote"]
+
+    if _missing(cache, local_entries):
+        try:
+            resp = _get(
+                f"{raw_base}/.zenodo-record.json",
+                token=token,
+                allow_not_found=True,
+            )
+            if resp.status_code == 404:
+                raise DatasetSyncError("No published Zenodo dataset record found")
+
+            state = resp.json()
+            _seed_zenodo(cache, state, zenodo_base)
+
+        except (DatasetSyncError, requests.RequestException) as exc:
+            if not ignore_zenodo_errors:
+                raise DatasetSyncError(
+                    f"Failed to fetch dataset objects from Zenodo: {exc}. "
+                    "Use --ignore-zenodo-errors to continue with GitHub LFS."
+                ) from exc
+
+            _progress(f"Zenodo fetch failed; continuing with GitHub LFS: {exc}")
+            state = {}
+    else:
+        _progress("All hosted objects already cached; skipping Zenodo")
+
+    # Fetch only objects still missing from the cache via GitHub LFS.
     _fetch_current_objects(cache, manifest, repo, commit, token)
+
+    # Fetch remote documents into the cache.
+    for record_id, record in manifest["records"].items():
+        document = record["document"]
+        if document.get("source") == "remote":
+            _fetch_external_document(document, cache, record_id)
 
     provenance = {
         "dataset_git_commit": commit,
@@ -373,4 +447,25 @@ def sync_dataset(
         "zenodo_doi": state.get("latest_doi"),
         "zenodo_record_id": state.get("latest_recid"),
     }
-    return _materialize(target, cache, manifest, provenance), provenance
+
+    # Materialize available objects into the target dataset directory.
+    dataset_path = _materialize(target, cache, manifest, provenance)
+
+    skipped_records = [
+        record_id
+        for record_id, record in manifest["records"].items()
+        if not (dataset_path / record["document"]["path"]).is_file()
+        or not (dataset_path / record["metadata"]["path"]).is_file()
+    ]
+
+    total_records = len(manifest["records"])
+    ready_records = total_records - len(skipped_records)
+
+    _progress(
+        f"Dataset ready: {ready_records}/{total_records} records ready, "
+        f"{len(skipped_records)} skipped"
+    )
+    for record_id in skipped_records:
+        _progress(f"  skipped: {record_id}")
+
+    return dataset_path, provenance

@@ -37,6 +37,11 @@ def sync_dataset_command(
         "--target",
         help="Target directory for the eval dataset.",
     ),
+    ignore_zenodo_errors: bool = typer.Option(
+        False,
+        "--ignore-zenodo-errors",
+        help="Continue with GitHub LFS if fetching the dataset from Zenodo fails.",
+    ),
 ):
     """Download the eval dataset into the local cache."""
     dataset_root, _ = sync_dataset(
@@ -44,6 +49,7 @@ def sync_dataset_command(
         ref=ref,
         cache=cache,
         target=target,
+        ignore_zenodo_errors=ignore_zenodo_errors,
     )
     typer.echo(f"Dataset ready at {dataset_root}")
 
