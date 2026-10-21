@@ -50,10 +50,16 @@ def _entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     entries = []
     paths = set()
     for record_id, record in records.items():
-        for field in ("document", "metadata"):
-            entry = record.get(field)
-            if not isinstance(entry, dict):
-                raise DatasetSyncError(f"{record_id}: missing {field} entry")
+        document = record.get("document")
+        metadata = record.get("metadata")
+        source = document.get("source")
+
+        if source is None:
+            local_entries = [document, metadata]
+        elif source == "url":
+            local_entries = [metadata]
+
+        for entry in local_entries:
             relative = PurePosixPath(entry.get("path", ""))
             if (
                 relative.is_absolute()
@@ -67,7 +73,7 @@ def _entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 r"[0-9a-f]{64}", checksum
             ):
                 raise DatasetSyncError(f"{record_id}: invalid SHA-256")
-            if not isinstance(size, int) or size < 0:
+            if not isinstance(size, int) or isinstance(size, bool) or size < 0:
                 raise DatasetSyncError(f"{record_id}: invalid size")
             path = relative.as_posix()
             if path in paths:
@@ -75,6 +81,25 @@ def _entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             paths.add(path)
             entries.append({"path": path, "sha256": checksum, "size": size})
     return sorted(entries, key=lambda entry: entry["path"])
+
+
+def _fetch_external_document(
+    document: dict[str, Any],
+    destination: Path,
+) -> None:
+    if destination.exists():
+        return
+
+    url = document["url"]
+    _progress(f"Fetching arXiv paper: {url}")
+    data = _get(url).content
+    if not data.startswith(b"%PDF-"):
+        raise DatasetSyncError(f"arXiv returned a non-PDF response for {url}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".tmp")
+    temporary.write_bytes(data)
+    temporary.replace(destination)
 
 
 def _headers(token: str | None = None) -> dict[str, str]:
@@ -279,13 +304,15 @@ def _materialize(
     entries = _entries(manifest)
     missing_paths = {entry["path"] for entry in _missing(cache, entries)}
     skipped_paths = set()
+
     for record in manifest["records"].values():
-        record_paths = {
-            record["document"]["path"],
-            record["metadata"]["path"],
-        }
+        document = record["document"]
+        record_paths = {record["metadata"]["path"]}
+        if document.get("source") is None:
+            record_paths.add(document["path"])
         if record_paths & missing_paths:
             skipped_paths.update(record_paths)
+
     entries = [entry for entry in entries if entry["path"] not in skipped_paths]
     current_paths = {entry["path"] for entry in entries}
     previous_paths = set(previous.get("managed_paths", []))
@@ -299,21 +326,13 @@ def _materialize(
         destination = target / entry["path"]
         source = _object_path(cache, entry["sha256"])
         destination.parent.mkdir(parents=True, exist_ok=True)
-        replace_managed_link = (
-            destination.is_symlink() and entry["path"] in previous_paths
-        )
         if destination.exists() or destination.is_symlink():
-            if (
-                entry["path"] in previous_paths
-                and not destination.is_symlink()
-                and destination.is_file()
-                and destination.samefile(source)
-            ):
-                continue
-            if not replace_managed_link:
+            if entry["path"] not in previous_paths:
                 raise DatasetSyncError(
                     f"Refusing to replace unmanaged file: {destination}"
                 )
+            if not destination.is_symlink() and destination.samefile(source):
+                continue
         _progress(f"Hard-linking {entry['path']}")
         try:
             with tempfile.TemporaryDirectory(dir=destination.parent) as temporary_dir:
@@ -373,4 +392,13 @@ def sync_dataset(
         "zenodo_doi": state.get("latest_doi"),
         "zenodo_record_id": state.get("latest_recid"),
     }
-    return _materialize(target, cache, manifest, provenance), provenance
+
+    dataset_path = _materialize(target, cache, manifest, provenance)
+
+    for record in manifest["records"].values():
+        document = record["document"]
+        if document.get("source") != "url":
+            continue
+        _fetch_external_document(document, dataset_path / document["path"])
+
+    return dataset_path, provenance
