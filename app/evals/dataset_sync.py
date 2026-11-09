@@ -50,8 +50,11 @@ def _entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     entries = []
     paths = set()
     for record_id, record in records.items():
-        document = record.get("document")
-        metadata = record.get("metadata")
+        for field in ("document", "metadata"):
+            if not isinstance(record.get(field), dict):
+                raise DatasetSyncError(f"{record_id}: missing {field} entry")
+        document = record["document"]
+        metadata = record["metadata"]
         source = document.get("source", "dataset")
 
         if source not in ("dataset", "remote"):
