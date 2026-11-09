@@ -3,6 +3,8 @@
 
 variables:
   KUBERNETES_IMAGE_PULL_POLICY: "if-not-present"
+  # GitLab only caches paths inside the project dir.
+  XDG_CACHE_HOME: "$CI_PROJECT_DIR/.cache"
 
 stages:
   - evals
@@ -10,6 +12,13 @@ stages:
 evals:
   stage: evals
   image: registry.cern.ch/docker.io/astral/uv:python3.14-bookworm
+  cache:
+    key: orcha-eval-dataset
+    # Only the object store; the dataset dir is hard links that zip would duplicate.
+    paths:
+      - .cache/orcha-eval-dataset/objects
+    # Keep downloads when a later eval step fails.
+    when: always
   before_script:
     - uv sync --locked --no-cache --extra langfuse
 
