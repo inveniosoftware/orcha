@@ -401,21 +401,16 @@ def sync_dataset(
     manifest = json.loads(manifest_bytes)
     entries = _entries(manifest)  # also validates the manifest
 
-    # Reuse verified cache objects; fetch missing objects from Zenodo.
-    state: dict[str, Any] = {}
+    # Read the Zenodo record even on warm caches so provenance names it.
+    resp = _get(f"{raw_base}/.zenodo-record.json", token=token, allow_not_found=True)
+    state: dict[str, Any] = {} if resp.status_code == 404 else resp.json()
     local_entries = [entry for entry in entries if entry.get("source") != "remote"]
 
+    # Reuse verified cache objects; fetch missing objects from Zenodo.
     if _missing(cache, local_entries):
         try:
-            resp = _get(
-                f"{raw_base}/.zenodo-record.json",
-                token=token,
-                allow_not_found=True,
-            )
-            if resp.status_code == 404:
+            if not state:
                 raise DatasetSyncError("No published Zenodo dataset record found")
-
-            state = resp.json()
             _seed_zenodo(cache, state, zenodo_base)
 
         except (DatasetSyncError, requests.RequestException) as exc:
