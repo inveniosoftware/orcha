@@ -3,7 +3,11 @@
 
 """Resolved metadata fields."""
 
+from difflib import SequenceMatcher
+
 from pydantic import BaseModel, Field
+
+from app.schemas.extracted_metadata import FUNDER_NAMES_BY_ROR_ID
 
 
 class ResolvedFunder(BaseModel):
@@ -40,6 +44,19 @@ class ResolvedFunding(BaseModel):
     funder: ResolvedFunder | None = None
     award: ResolvedAward | None = None
 
+    def normalize_for_comparison(self, matched=None) -> dict:
+        """Normalize for comparisons."""
+        normalized = {}
+        if self.funder:
+            normalized["funder_id"] = self.funder.id
+            normalized["funder_name"] = self.funder.name or FUNDER_NAMES_BY_ROR_ID.get(
+                self.funder.id
+            )
+        if self.award:
+            for k in self.award.model_dump().keys():
+                normalized["award_" + k] = getattr(self.award, k)
+        return normalized
+
 
 class ResolvedLicense(BaseModel):
     """A license resolved against the Invenio licenses vocabulary."""
@@ -57,3 +74,23 @@ class ResolvedLicense(BaseModel):
             "https://opensource.org/licenses/MIT",
         ],
     )
+
+    def matches(self, other: ResolvedLicense) -> bool:
+        """Logic to pair two license entries."""
+        if self.id.casefold() == other.id.casefold():
+            return True
+        if not self.title or not other.title:
+            return False
+        return (
+            SequenceMatcher(None, self.title.casefold(), other.title.casefold()).ratio()
+            >= 0.8
+        )
+
+    def normalize_for_comparison(self, matched=None) -> dict:
+        """Normalize for comparisons. Borrows the resolved license title on a match."""
+        normalized = {"id": self.id}
+        if self.title:
+            normalized["title"] = self.title
+        elif matched and matched.title:
+            normalized["title"] = matched.title
+        return normalized
