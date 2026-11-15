@@ -7,34 +7,68 @@ variables:
   XDG_CACHE_HOME: "$CI_PROJECT_DIR/.cache"
 
 stages:
+  - sync
   - evals
+  - publish
 
-evals:
-  stage: evals
+.eval-job:
   image: registry.cern.ch/docker.io/astral/uv:python3.14-bookworm
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+
+# Download the dataset once and pin its commit for every model job.
+sync_dataset:
+  extends: .eval-job
+  stage: sync
   cache:
     key: orcha-eval-dataset
     # Only the object store; the dataset dir is hard links that zip would duplicate.
     paths:
       - .cache/orcha-eval-dataset/objects
-    # Keep downloads when a later eval step fails.
+    # Keep downloads when a later step fails.
     when: always
+  script:
+    - uv sync --locked --no-cache
+    - uv run orcha evals sync_dataset
+    - >
+      uv run python -c "import json, os;
+      state = json.load(open(os.environ['XDG_CACHE_HOME'] + '/orcha-eval-dataset/dataset/.dataset-state.json'));
+      print('DATASET_COMMIT=' + state['dataset_git_commit'])" > dataset.env
+    - cat dataset.env
+  artifacts:
+    reports:
+      dotenv: dataset.env
+
+# One job per model; each reuses the cached objects at the pinned commit.
+evals:
+  extends: .eval-job
+  stage: evals
+  needs: [sync_dataset]
+  parallel:
+    matrix:
+      - MODEL:
+          - gpt-oss-20b
+          - glm-5.3-flash-int4
+          - gemma-4-12b-it-qat-w4a16-ct
+          - qwen3.8-27b-fp16
+  # Read-only: sync_dataset already filled it; a cold cache refetches from Zenodo.
+  cache:
+    key: orcha-eval-dataset
+    paths:
+      - .cache/orcha-eval-dataset/objects
+    policy: pull
   before_script:
     - uv sync --locked --no-cache --extra langfuse
-
   script:
-    - uv run orcha evals sync_dataset
-
-    # One timestamp per run, used for every output location
+    - uv run orcha evals sync_dataset --ref "$DATASET_COMMIT"
     - |
       set -eo pipefail
-      run_id="$(date -u +'%Y-%m-%dT%H-%M-%S')"
-      out="app/evals/eval_results/$run_id"
+      out="eval-out/$MODEL"
       mkdir -p "$out"
 
-      # Run evaluation
       uv run orcha evals run \
-        --model "litellm/gpt-oss-20b" \
+        --model "litellm/$MODEL" \
         --langfuse \
         --ignore-langfuse-errors \
         --save-json \
@@ -43,32 +77,62 @@ evals:
 
       # Fail if the eval produced no scores
       grep -q "Average Scores:" "$out/results.md"
+  artifacts:
+    paths:
+      - eval-out/
+    expire_in: 1 week
 
-      # Compare with previous report and save
+# Compare each model with its previous run and push one commit with all of them.
+publish_results:
+  extends: .eval-job
+  stage: publish
+  needs: [evals]
+  # Publish the models that succeeded even when another model's job failed.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: always
+  script:
+    - |
+      set -eo pipefail
+      # One timestamp per pipeline, used for the results folder
+      run_id="$(echo "${CI_PIPELINE_CREATED_AT%Z}" | tr ':' '-')"
+
       git clone --depth 1 \
         "https://oauth2:${EVAL_RESULTS_TOKEN}@${EVAL_RESULTS_REPO#https://}" \
         eval-results-repo
-
       results_dir="eval-results-repo/results"
       mkdir -p "$results_dir"
 
-      # Latest previous run folder
-      previous=$(ls -d "$results_dir"/*/ 2>/dev/null | sort | tail -n 1 || true)
+      published=0
+      for out in eval-out/*/; do
+        model="$(basename "$out")"
+        [ -f "$out/results.md" ] || continue
 
-      {
-        if [ -n "$previous" ] && [ -f "${previous}report.md" ]; then
-          uv run python app/evals/compare_results.py "${previous}report.md" "$out/results.md"
-        else
-          echo "No previous results, skipping comparison"
-        fi
+        # Latest previous report for this model
+        previous=$(ls -d "$results_dir"/*/"$model"/ 2>/dev/null | sort | tail -n 1 || true)
 
-        printf '\n\n---\n\n'
-        cat "$out/results.md"
-      } > "$out/report.md"
+        {
+          if [ -n "$previous" ] && [ -f "${previous}report.md" ]; then
+            python app/evals/compare_results.py "${previous}report.md" "$out/results.md"
+          else
+            echo "No previous results for $model, skipping comparison"
+          fi
 
-      # Save report + JSON in a timestamped folder in the results repo
-      mkdir -p "$results_dir/$run_id"
-      cp "$out/report.md" "$out"/*.json "$results_dir/$run_id/"
+          printf '\n\n---\n\n'
+          cat "$out/results.md"
+        } > "$out/report.md"
+
+        mkdir -p "$results_dir/$run_id/$model"
+        cp "$out/report.md" "$out"/*.json "$results_dir/$run_id/$model/"
+        published=$((published + 1))
+      done
+
+      if [ "$published" -eq 0 ]; then
+        echo "No model produced results" >&2
+        exit 1
+      fi
 
       cd eval-results-repo
       git config user.name "Orcha CI"
@@ -76,7 +140,3 @@ evals:
       git add results
       git commit -m "Add eval results: $run_id"
       git push
-
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
