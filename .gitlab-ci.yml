@@ -36,6 +36,7 @@ evals:
       uv run orcha evals run \
         --model "litellm/gpt-oss-20b" \
         --langfuse \
+        --ignore-langfuse-errors \
         --save-json \
         --output "$out" \
         | tee "$out/results.md"

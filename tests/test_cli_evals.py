@@ -36,6 +36,7 @@ def test_run_evals_sets_model_and_passes_options(monkeypatch):
         extractor="pdfplumber",
         prompt_name="prompt",
         use_langfuse=False,
+        ignore_langfuse_errors=False,
         save_json=False,
         samples=None,
         seed=42,
@@ -59,6 +60,7 @@ def test_run_evals_can_enable_langfuse(monkeypatch):
         extractor="pdfplumber",
         prompt_name="prompt",
         use_langfuse=True,
+        ignore_langfuse_errors=False,
         save_json=False,
         samples=None,
         seed=42,
@@ -69,19 +71,22 @@ def test_run_evals_can_enable_langfuse(monkeypatch):
 
 
 def test_run_evals_can_enable_langfuse_and_save_json(monkeypatch):
-    """`--langfuse --save-json` enables both Langfuse and local JSON saving."""
+    """`--langfuse --ignore-langfuse-errors --save-json` passes all three flags."""
     fake_run = Mock()
 
     monkeypatch.setattr("app.cli.evals.run_evaluation", fake_run)
     monkeypatch.setattr("app.cli.evals.asyncio.run", lambda coro: None)
 
-    result = runner.invoke(app, ["evals", "run", "--langfuse", "--save-json"])
+    result = runner.invoke(
+        app, ["evals", "run", "--langfuse", "--ignore-langfuse-errors", "--save-json"]
+    )
 
     assert result.exit_code == 0
     fake_run.assert_called_once_with(
         extractor="pdfplumber",
         prompt_name="prompt",
         use_langfuse=True,
+        ignore_langfuse_errors=True,
         save_json=True,
         samples=None,
         seed=42,

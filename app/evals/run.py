@@ -9,6 +9,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from rich.progress import Progress
 
@@ -134,25 +135,33 @@ async def _run_local(items, extract) -> list[dict]:
 
 
 def _run_langfuse(
-    items, extract, extractor, prompt_name, samples, settings
+    items, extract, extractor, prompt_name, samples, settings, ignore_errors=False
 ) -> list[dict]:
     from langfuse import get_client
 
     client = get_client()
-    prompt_ref = sync_extraction_prompt(client, prompt_name)
+    try:
+        prompt_ref = sync_extraction_prompt(client, prompt_name)
+        data = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
+    except Exception as exc:
+        if not ignore_errors:
+            raise
+        logger.warning("Langfuse is unavailable; running on the local dataset: %s", exc)
+        prompt_ref: dict[str, Any] = {"name": prompt_name, "version": None}
+        data = items
     results: list[dict] = []
 
     async def task(*, item, **_):
-        outcome = await extract(
-            {"input": item.input, "expected_output": item.expected_output}
-        )
+        if not isinstance(item, dict):
+            item = {"input": item.input, "expected_output": item.expected_output}
+        outcome = await extract(item)
         results.append(outcome)
         return outcome
 
     experiment = client.run_experiment(
         name=f"{extractor}__{settings.llm}",
         description="Extract and evaluate document metadata",
-        data=get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples),
+        data=data,
         metadata={
             "dataset_name": DATASET_NAME,
             "model": settings.llm,
@@ -173,6 +182,7 @@ async def run(
     extractor: str = "pdfplumber",
     prompt_name: str = "prompt",
     use_langfuse: bool = False,
+    ignore_langfuse_errors: bool = False,
     save_json: bool = False,
     samples: int | None = None,
     seed: int = 42,
@@ -201,7 +211,13 @@ async def run(
         progress_task = progress.add_task("Running evaluations", total=len(items))
         if use_langfuse:
             results = _run_langfuse(
-                items, extract, extractor, prompt_name, samples, settings
+                items,
+                extract,
+                extractor,
+                prompt_name,
+                samples,
+                settings,
+                ignore_errors=ignore_langfuse_errors,
             )
         else:
             results = await _run_local(items, extract)

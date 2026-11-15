@@ -68,6 +68,11 @@ def run(
         "--langfuse",
         help="Store and report the experiment in Langfuse.",
     ),
+    ignore_langfuse_errors: bool = typer.Option(
+        False,
+        "--ignore-langfuse-errors",
+        help="With --langfuse, run on the local dataset if Langfuse is unavailable.",
+    ),
     save_json: bool = typer.Option(
         False,
         "--save-json",
@@ -99,6 +104,7 @@ def run(
                 extractor=extractor,
                 prompt_name=prompt_name,
                 use_langfuse=use_langfuse,
+                ignore_langfuse_errors=ignore_langfuse_errors,
                 save_json=save_json,
                 samples=samples,
                 seed=seed,
