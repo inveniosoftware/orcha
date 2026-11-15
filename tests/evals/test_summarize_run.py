@@ -53,13 +53,18 @@ def test_summary_ranks_whole_run_and_shared_items(tmp_path):
         langfuse="ok",
     )
     _write(tmp_path, "2026-11-01T10-00-00", "model-b", {"x": 0.3, "y": 0.3})
+    # A change too small to show reads as unchanged, not as an improvement.
+    _write(
+        tmp_path, "2026-11-01T10-00-00", "model-a", {"x": 0.2, "y": 0.2, "z": 0.9997}
+    )
 
     readme = summarize(tmp_path, "2026-11-15T10-00-00", missing=["model-c"])
 
     whole_run, shared = readme.split("## Leaderboard: shared items")
     # Whole run: model-b's failed item z counts as 0, so (0.4 + 0.4 + 0) / 3.
     assert (
-        "| 1 | model-a | **0.467** | — | 0.467 | 3/3 | 0 | 7m 17s | 2.0s |" in whole_run
+        "| 1 | model-a | **0.467** | ⬜ +0.000 | 0.467 | 3/3 | 0 | 7m 17s | 2.0s |"
+        in whole_run
     )
     assert (
         "| 2 | model-b | 0.267 | 🟩 +0.100 | 0.400 | 2/3 | 1 | 1m 05s | 2.0s |"

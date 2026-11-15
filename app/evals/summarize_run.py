@@ -71,6 +71,8 @@ def fmt_change(change: float | None) -> str:
     """Format a score change with the indicator compare_results.py uses."""
     if change is None:
         return "—"
+    # Pick the indicator from the shown value, so +0.000 is unchanged.
+    change = round(change, 3) + 0.0  # + 0.0 turns -0.0 into 0.0
     indicator = "🟩" if change > 0 else "🔴" if change < 0 else "⬜"
     return f"{indicator} {change:+.3f}"
 
