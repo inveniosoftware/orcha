@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 DATASET_NAME = "orcha-eval-dataset"
 MAX_CONCURRENT_REQUESTS = 4
+# Seconds one item may take, including LLM retries, before it counts as failed.
+ITEM_TIMEOUT = 120.0
 RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -213,6 +215,7 @@ async def run(
     save_json: bool = False,
     samples: int | None = None,
     seed: int = 42,
+    item_timeout: float = ITEM_TIMEOUT,
     results_dir: Path | None = None,
     cache: Path | None = None,
     target: Path | None = None,
@@ -227,11 +230,17 @@ async def run(
         try:
             async with semaphore:
                 started = time.perf_counter()
-                result = await extraction_task(
-                    dataset_item=item,
-                    dataset_root=dataset_root,
-                    extractor_name=extractor,
-                )
+                try:
+                    result = await asyncio.wait_for(
+                        extraction_task(
+                            dataset_item=item,
+                            dataset_root=dataset_root,
+                            extractor_name=extractor,
+                        ),
+                        timeout=item_timeout,
+                    )
+                except TimeoutError:
+                    raise TimeoutError(f"timed out after {item_timeout:g}s") from None
                 result["duration_seconds"] = round(time.perf_counter() - started, 2)
                 return result
         finally:

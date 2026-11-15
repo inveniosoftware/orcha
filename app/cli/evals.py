@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from app.evals.dataset_sync import sync_dataset
+from app.evals.run import ITEM_TIMEOUT
 from app.evals.run import run as run_evaluation
 
 evals_app = typer.Typer(
@@ -82,6 +83,11 @@ def run(
         None, "--samples", help="Sample this many items, proportionally per category."
     ),
     seed: int = typer.Option(42, "--seed", help="Seed for the sampling."),
+    item_timeout: float = typer.Option(
+        ITEM_TIMEOUT,
+        "--item-timeout",
+        help="Seconds one item may take before it counts as failed.",
+    ),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -108,6 +114,7 @@ def run(
                 save_json=save_json,
                 samples=samples,
                 seed=seed,
+                item_timeout=item_timeout,
                 results_dir=output,
                 cache=cache,
                 target=target,

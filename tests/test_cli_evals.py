@@ -27,6 +27,8 @@ def test_run_evals_sets_model_and_passes_options(monkeypatch):
             "pdfplumber",
             "--prompt",
             "prompt",
+            "--item-timeout",
+            "30",
         ],
     )
 
@@ -40,6 +42,7 @@ def test_run_evals_sets_model_and_passes_options(monkeypatch):
         save_json=False,
         samples=None,
         seed=42,
+        item_timeout=30.0,
         results_dir=None,
         cache=None,
         target=None,
@@ -64,6 +67,7 @@ def test_run_evals_can_enable_langfuse(monkeypatch):
         save_json=False,
         samples=None,
         seed=42,
+        item_timeout=120.0,
         results_dir=None,
         cache=None,
         target=None,
@@ -90,6 +94,7 @@ def test_run_evals_can_enable_langfuse_and_save_json(monkeypatch):
         save_json=True,
         samples=None,
         seed=42,
+        item_timeout=120.0,
         results_dir=None,
         cache=None,
         target=None,
