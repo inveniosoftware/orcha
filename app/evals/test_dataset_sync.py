@@ -48,9 +48,7 @@ def test_materialize_hard_links_and_skips_incomplete_records(tmp_path, capsys):
         "version": "test",
         "managed_paths": ["files/Articles/ART_1.pdf", "metadata/ART_1.json"],
     }
-    assert capsys.readouterr().err == (
-        "Hard-linking files/Articles/ART_1.pdf\nHard-linking metadata/ART_1.json\n"
-    )
+    assert capsys.readouterr().err == f"Hard-linked 2 files into {target}\n"
 
     dataset_sync._object_path(cache, entries["document"]["sha256"]).unlink()
     dataset_sync._materialize(target, cache, manifest, {"version": "test"})

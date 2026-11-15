@@ -350,6 +350,7 @@ def _materialize(
             _progress(f"Removing stale {stale}")
             stale_path.unlink()
 
+    linked = 0
     for entry in entries:
         destination = target / entry["path"]
         source = _object_path(cache, entry["sha256"])
@@ -361,7 +362,6 @@ def _materialize(
                 )
             if not destination.is_symlink() and destination.samefile(source):
                 continue
-        _progress(f"Hard-linking {entry['path']}")
         try:
             with tempfile.TemporaryDirectory(dir=destination.parent) as temporary_dir:
                 temporary = Path(temporary_dir) / "object"
@@ -371,6 +371,9 @@ def _materialize(
             raise DatasetSyncError(
                 f"Could not hard-link {destination} to cache object {source}: {error}"
             ) from error
+        linked += 1
+    if linked:
+        _progress(f"Hard-linked {linked} files into {target}")
 
     materialized = {**provenance, "managed_paths": sorted(current_paths)}
     state_path.write_text(json.dumps(materialized, indent=2) + "\n", encoding="utf-8")

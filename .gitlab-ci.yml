@@ -5,6 +5,10 @@ variables:
   KUBERNETES_IMAGE_PULL_POLICY: "if-not-present"
   # GitLab only caches paths inside the project dir.
   XDG_CACHE_HOME: "$CI_PROJECT_DIR/.cache"
+  # The evals don't need dev tools; applies to uv sync and uv run.
+  UV_NO_DEV: "1"
+  # uv's download cache and .venv sit on different filesystems in CI.
+  UV_LINK_MODE: "copy"
 
 stages:
   - sync
