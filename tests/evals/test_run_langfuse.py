@@ -1,20 +1,11 @@
 import pytest
 
-from app.config import get_settings
-from app.evals.run import _run_langfuse
+from app.evals.run import _connect_langfuse, format_scores
 
 ITEMS = [
     {"id": "a", "input": {"record_id": "a"}, "expected_output": {"title": "A"}},
     {"id": "b", "input": {"record_id": "b"}, "expected_output": {"title": "B"}},
 ]
-
-
-async def _extract(item):
-    record_id = item["input"]["record_id"]
-    return {
-        "pdf_filename": f"{record_id}__doc.pdf",
-        "comparison": {"average_score": 0.5, "fields": {}},
-    }
 
 
 @pytest.fixture
@@ -26,20 +17,49 @@ def unreachable_langfuse(monkeypatch):
     monkeypatch.setenv("LANGFUSE_TIMEOUT", "1")
 
 
-def test_run_langfuse_falls_back_to_local_items(unreachable_langfuse):
-    """With ignore_errors, an unreachable Langfuse still evaluates every item."""
-    results, info = _run_langfuse(
-        ITEMS, _extract, "pdfplumber", "prompt", None, get_settings(), True
-    )
-
-    assert sorted(r["pdf_filename"] for r in results) == [
-        "a__doc.pdf",
-        "b__doc.pdf",
-    ]
-    assert info == {"langfuse": "unavailable", "prompt_version": None}
+def test_connect_langfuse_returns_none_when_ignoring_errors(unreachable_langfuse):
+    """With ignore_errors, an unreachable Langfuse means running without it."""
+    assert _connect_langfuse(ITEMS, "prompt", None, ignore_errors=True) is None
 
 
-def test_run_langfuse_raises_without_ignore_errors(unreachable_langfuse):
+def test_connect_langfuse_raises_without_ignore_errors(unreachable_langfuse):
     """Without ignore_errors, an unreachable Langfuse fails the run."""
     with pytest.raises(Exception):
-        _run_langfuse(ITEMS, _extract, "pdfplumber", "prompt", None, get_settings())
+        _connect_langfuse(ITEMS, "prompt", None)
+
+
+def test_format_scores_matches_the_langfuse_summary():
+    """Local runs print the per-evaluation averages CI checks and compares."""
+
+    def result(title, doi):
+        return {
+            "comparison": {
+                "average_score": (title + doi) / 2,
+                "fields": {
+                    "title": {
+                        "score": title,
+                        "expected": "",
+                        "predicted": "",
+                        "matched": False,
+                    },
+                    "doi": {
+                        "score": doi,
+                        "expected": "",
+                        "predicted": "",
+                        "matched": False,
+                    },
+                },
+            }
+        }
+
+    summary = format_scores([result(1.0, 0.0), result(0.5, 1.0)])
+
+    assert summary.splitlines() == [
+        "Average Scores:",
+        "  • title_score: 0.750",
+        "  • doi_score: 0.500",
+        "  • item_summary: 0.625",
+        "",
+        "Run Evaluations:",
+        "  • run_average_score: 0.620",
+    ]

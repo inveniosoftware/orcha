@@ -137,30 +137,51 @@ async def _run_local(items, extract) -> list[dict]:
     return results
 
 
-def _run_langfuse(
-    items, extract, extractor, prompt_name, samples, settings, ignore_errors=False
-) -> tuple[list[dict], dict[str, Any]]:
-    """Run the experiment in Langfuse; return its results and Langfuse run info."""
+def format_scores(results: list[dict]) -> str:
+    """Summarize local results in the same format as Langfuse experiments."""
+    values: dict[str, list[float]] = {}
+    for result in results:
+        for evaluation in item_summary_evaluator(output=result):
+            values.setdefault(str(evaluation.name), []).append(float(evaluation.value))
+    lines = ["Average Scores:"]
+    lines += [f"  • {name}: {sum(v) / len(v):.3f}" for name, v in values.items()]
+    summaries = values.get("item_summary", [])
+    run_average = round(sum(summaries) / len(summaries), 2) if summaries else 0.0
+    lines += ["", "Run Evaluations:", f"  • run_average_score: {run_average:.3f}"]
+    return "\n".join(lines)
+
+
+def _connect_langfuse(items, prompt_name, samples, ignore_errors=False):
+    """Sync the prompt and dataset to Langfuse.
+
+    Returns the client, prompt reference, and Langfuse dataset items, or None
+    when Langfuse is unavailable and ``ignore_errors`` is set.
+    """
     from langfuse import get_client
 
     client = get_client()
     try:
         prompt_ref = sync_extraction_prompt(client, prompt_name)
         data = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
-        status = "ok"
     except Exception as exc:
         if not ignore_errors:
             raise
-        logger.warning("Langfuse is unavailable; running on the local dataset: %s", exc)
-        prompt_ref: dict[str, Any] = {"name": prompt_name, "version": None}
-        data = items
-        status = "unavailable"
+        # Error bodies can be whole HTML pages; log only the status or first line.
+        status = getattr(exc, "status_code", None)
+        detail = f"HTTP {status}" if status else str(exc).splitlines()[0][:200]
+        logger.warning("Langfuse is unavailable (%s); running without it", detail)
+        return None
+    return client, prompt_ref, data
+
+
+def _run_langfuse(client, prompt_ref, data, extract, extractor, settings) -> list[dict]:
+    """Run the experiment in Langfuse and return its results."""
     results: list[dict] = []
 
     async def task(*, item, **_):
-        if not isinstance(item, dict):
-            item = {"input": item.input, "expected_output": item.expected_output}
-        outcome = await extract(item)
+        outcome = await extract(
+            {"input": item.input, "expected_output": item.expected_output}
+        )
         results.append(outcome)
         return outcome
 
@@ -181,7 +202,7 @@ def _run_langfuse(
         run_evaluators=[average_score_evaluator],
     )
     print(experiment.format())
-    return results, {"langfuse": status, "prompt_version": prompt_ref.get("version")}
+    return results
 
 
 async def run(
@@ -217,21 +238,27 @@ async def run(
             progress.advance(progress_task)
 
     started = time.perf_counter()
-    run_info: dict[str, Any] = {"langfuse": "disabled", "prompt_version": None}
+    langfuse = (
+        _connect_langfuse(items, prompt_name, samples, ignore_langfuse_errors)
+        if use_langfuse
+        else None
+    )
+    run_info: dict[str, Any] = {
+        "langfuse": "unavailable" if use_langfuse else "disabled",
+        "prompt_version": None,
+    }
     with Progress() as progress:
         progress_task = progress.add_task("Running evaluations", total=len(items))
-        if use_langfuse:
-            results, run_info = _run_langfuse(
-                items,
-                extract,
-                extractor,
-                prompt_name,
-                samples,
-                settings,
-                ignore_errors=ignore_langfuse_errors,
+        if langfuse:
+            client, prompt_ref, data = langfuse
+            results = _run_langfuse(
+                client, prompt_ref, data, extract, extractor, settings
             )
+            run_info = {"langfuse": "ok", "prompt_version": prompt_ref.get("version")}
         else:
             results = await _run_local(items, extract)
+    if not langfuse and results:
+        print(format_scores(results))
 
     if save_json:
         state = json.loads((dataset_root / ".dataset-state.json").read_text())
