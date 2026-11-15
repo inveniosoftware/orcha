@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
 from rich.progress import Progress
 
 from app.activities.extract_metadata import extract_metadata_record
@@ -129,14 +130,8 @@ async def _run_local(items, extract) -> list[dict]:
         *(extract(item) for item in items),
         return_exceptions=True,
     )
-    results = []
-    for item, outcome in zip(items, outcomes):
-        if isinstance(outcome, BaseException):
-            record_id = item["input"].get("record_id", "").strip("_")
-            logger.error("Evaluation failed for %s: %s", record_id, outcome)
-        else:
-            results.append(outcome)
-    return results
+    # Failures were already reported as each item finished.
+    return [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]
 
 
 def format_scores(results: list[dict]) -> str:
@@ -226,25 +221,40 @@ async def run(
     settings = get_settings()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
+    completed = 0
+
+    def report(record_id: str, started: float, outcome: str, error=None) -> None:
+        """Print one line per finished item, so CI logs show progress too."""
+        nonlocal completed
+        completed += 1
+        progress.advance(progress_task)
+        line = f"[{completed}/{len(items)}] {record_id} {outcome}"
+        line += f" in {time.perf_counter() - started:.1f}s"
+        progress.console.print(line + (f": {error}" if error else ""), markup=False)
+
     async def extract(item: dict):
-        try:
-            async with semaphore:
-                started = time.perf_counter()
-                try:
-                    result = await asyncio.wait_for(
-                        extraction_task(
-                            dataset_item=item,
-                            dataset_root=dataset_root,
-                            extractor_name=extractor,
-                        ),
-                        timeout=item_timeout,
-                    )
-                except TimeoutError:
-                    raise TimeoutError(f"timed out after {item_timeout:g}s") from None
-                result["duration_seconds"] = round(time.perf_counter() - started, 2)
-                return result
-        finally:
-            progress.advance(progress_task)
+        record_id = item["input"].get("record_id", "").strip("_")
+        async with semaphore:
+            started = time.perf_counter()
+            try:
+                result = await asyncio.wait_for(
+                    extraction_task(
+                        dataset_item=item,
+                        dataset_root=dataset_root,
+                        extractor_name=extractor,
+                    ),
+                    timeout=item_timeout,
+                )
+            except TimeoutError:
+                error = TimeoutError(f"timed out after {item_timeout:g}s")
+                report(record_id, started, "failed", error)
+                raise error from None
+            except Exception as error:
+                report(record_id, started, "failed", error)
+                raise
+            result["duration_seconds"] = round(time.perf_counter() - started, 2)
+            report(record_id, started, f"{result['comparison']['average_score']:.3f}")
+            return result
 
     started = time.perf_counter()
     langfuse = (
@@ -256,7 +266,8 @@ async def run(
         "langfuse": "unavailable" if use_langfuse else "disabled",
         "prompt_version": None,
     }
-    with Progress() as progress:
+    # Progress goes to stderr, so it stays out of the results CI tees from stdout.
+    with Progress(console=Console(stderr=True)) as progress:
         progress_task = progress.add_task("Running evaluations", total=len(items))
         if langfuse:
             client, prompt_ref, data = langfuse
