@@ -29,7 +29,8 @@ sync_dataset:
     # Keep downloads when a later step fails.
     when: always
   script:
-    - uv sync --locked --no-cache
+    # The evals CLI imports langfuse even for sync_dataset.
+    - uv sync --locked --no-cache --extra langfuse
     - uv run orcha evals sync_dataset
     - >
       uv run python -c "import json, os;
