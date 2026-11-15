@@ -340,7 +340,14 @@ def _materialize(
     entries = _entries(manifest)
     missing_paths = {entry["path"] for entry in _missing(cache, entries)}
 
-    entries = [entry for entry in entries if entry["path"] not in missing_paths]
+    # Skip a record's document and metadata together, so an incomplete record
+    # never leaves discoverable metadata behind.
+    skipped_paths = set()
+    for record in manifest["records"].values():
+        record_paths = {record["document"]["path"], record["metadata"]["path"]}
+        if record_paths & missing_paths:
+            skipped_paths.update(record_paths)
+    entries = [entry for entry in entries if entry["path"] not in skipped_paths]
 
     current_paths = {entry["path"] for entry in entries}
     previous_paths = set(previous.get("managed_paths", []))
