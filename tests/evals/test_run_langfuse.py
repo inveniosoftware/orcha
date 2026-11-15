@@ -28,7 +28,7 @@ def unreachable_langfuse(monkeypatch):
 
 def test_run_langfuse_falls_back_to_local_items(unreachable_langfuse):
     """With ignore_errors, an unreachable Langfuse still evaluates every item."""
-    results = _run_langfuse(
+    results, info = _run_langfuse(
         ITEMS, _extract, "pdfplumber", "prompt", None, get_settings(), True
     )
 
@@ -36,6 +36,7 @@ def test_run_langfuse_falls_back_to_local_items(unreachable_langfuse):
         "a__doc.pdf",
         "b__doc.pdf",
     ]
+    assert info == {"langfuse": "unavailable", "prompt_version": None}
 
 
 def test_run_langfuse_raises_without_ignore_errors(unreachable_langfuse):

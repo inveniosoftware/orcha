@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -63,12 +64,14 @@ def save_local_results(
     results_dir: Path,
     extractor: str,
     model: str,
+    run_info: dict[str, Any] | None = None,
 ) -> Path:
     """Write a local run's per-item results and average score to disk as JSON."""
     scores = [item["comparison"]["average_score"] for item in results]
     payload = {
         "extractor": extractor,
         "model": model,
+        **(run_info or {}),
         "item_count": len(results),
         "average_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
         "items": results,
@@ -136,19 +139,22 @@ async def _run_local(items, extract) -> list[dict]:
 
 def _run_langfuse(
     items, extract, extractor, prompt_name, samples, settings, ignore_errors=False
-) -> list[dict]:
+) -> tuple[list[dict], dict[str, Any]]:
+    """Run the experiment in Langfuse; return its results and Langfuse run info."""
     from langfuse import get_client
 
     client = get_client()
     try:
         prompt_ref = sync_extraction_prompt(client, prompt_name)
         data = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
+        status = "ok"
     except Exception as exc:
         if not ignore_errors:
             raise
         logger.warning("Langfuse is unavailable; running on the local dataset: %s", exc)
         prompt_ref: dict[str, Any] = {"name": prompt_name, "version": None}
         data = items
+        status = "unavailable"
     results: list[dict] = []
 
     async def task(*, item, **_):
@@ -175,7 +181,7 @@ def _run_langfuse(
         run_evaluators=[average_score_evaluator],
     )
     print(experiment.format())
-    return results
+    return results, {"langfuse": status, "prompt_version": prompt_ref.get("version")}
 
 
 async def run(
@@ -199,18 +205,23 @@ async def run(
     async def extract(item: dict):
         try:
             async with semaphore:
-                return await extraction_task(
+                started = time.perf_counter()
+                result = await extraction_task(
                     dataset_item=item,
                     dataset_root=dataset_root,
                     extractor_name=extractor,
                 )
+                result["duration_seconds"] = round(time.perf_counter() - started, 2)
+                return result
         finally:
             progress.advance(progress_task)
 
+    started = time.perf_counter()
+    run_info: dict[str, Any] = {"langfuse": "disabled", "prompt_version": None}
     with Progress() as progress:
         progress_task = progress.add_task("Running evaluations", total=len(items))
         if use_langfuse:
-            results = _run_langfuse(
+            results, run_info = _run_langfuse(
                 items,
                 extract,
                 extractor,
@@ -223,11 +234,19 @@ async def run(
             results = await _run_local(items, extract)
 
     if save_json:
+        state = json.loads((dataset_root / ".dataset-state.json").read_text())
         path = save_local_results(
             results,
             results_dir or PROJECT_ROOT / "app/evals/eval_results",
             extractor,
             settings.llm,
+            run_info={
+                "prompt_name": prompt_name,
+                **run_info,
+                "dataset_commit": state.get("dataset_git_commit"),
+                "total_items": len(items),
+                "duration_seconds": round(time.perf_counter() - started, 2),
+            },
         )
         print(f"Wrote {len(results)} results to {path}")
 

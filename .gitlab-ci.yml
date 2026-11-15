@@ -78,7 +78,9 @@ evals:
 
       # Fail if the eval produced no scores
       grep -q "Average Scores:" "$out/results.md"
+  # Also upload on failure, so publish_results can name the models without results.
   artifacts:
+    when: always
     paths:
       - eval-out/
     expire_in: 1 week
@@ -107,9 +109,15 @@ publish_results:
       mkdir -p "$results_dir"
 
       published=0
+      missing=()
       for out in eval-out/*/; do
+        [ -d "$out" ] || continue
         model="$(basename "$out")"
-        [ -f "$out/results.md" ] || continue
+        # Failed jobs upload partial output; keep only runs with scores and JSON.
+        if ! grep -qs "Average Scores:" "$out/results.md" || ! ls "$out"/*.json >/dev/null 2>&1; then
+          missing+=(--missing "$model")
+          continue
+        fi
 
         # Latest previous report for this model
         previous=$(ls -d "$results_dir"/*/"$model"/ 2>/dev/null | sort | tail -n 1 || true)
@@ -134,6 +142,9 @@ publish_results:
         echo "No model produced results" >&2
         exit 1
       fi
+
+      # Cross-model summary, shown by GitLab when browsing the run folder
+      python app/evals/summarize_run.py "$results_dir" "$run_id" "${missing[@]}"
 
       cd eval-results-repo
       git config user.name "Orcha CI"
