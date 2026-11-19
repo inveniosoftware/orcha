@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 import re
+from collections import Counter, defaultdict
+from collections.abc import Iterable
 from difflib import SequenceMatcher
 from itertools import zip_longest
 from typing import Any
@@ -347,6 +349,70 @@ class Evaluator:
         }
 
 
+THRESHOLDS = {
+    "title": 0.8,
+    "description": 0.8,
+    "doi": 1.0,  # hard match
+    "publication_date": 1.0,  # hard match
+    "creators_name": 0.8,
+    "creators_orcid": 1.0,  # hard match
+    "creators_affiliation": 0.8,
+}
+COUNT_KEYS = ("tp", "fp", "fn", "tn")
+
+
+def classification_counts(
+    fields: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, int]]:
+    """TP/FP/FN/TN per field, plus an 'overall' entry summed across fields."""
+    counts = {}
+    for name, threshold in THRESHOLDS.items():
+        field = fields[name]
+        has_truth = field["gt_present"]
+        has_prediction = bool(field["predicted"])
+        correct = field["score"] >= threshold
+
+        counts[name] = {
+            "tp": int(has_truth and correct),
+            "fn": int(has_truth and not correct),
+            "fp": int(has_prediction and not (has_truth and correct)),
+            "tn": int(not has_truth and not has_prediction),
+        }
+    counts["overall"] = {k: sum(c[k] for c in counts.values()) for k in COUNT_KEYS}
+    return counts
+
+
+def pool_counts(
+    counts_per_item: Iterable[dict[str, dict[str, int]]],
+) -> dict[str, Counter]:
+    """Sum per-item TP/FP/FN/TN counts into one total per field."""
+    pooled: dict[str, Counter] = defaultdict(Counter)
+    for item_counts in counts_per_item:
+        for name, counts in item_counts.items():
+            pooled[name].update(counts)
+    return pooled
+
+
+def metrics_from_counts(c: dict[str, int]) -> dict[str, float]:
+    """Compute precision, recall, F1 and accuracy from counts."""
+    tp, fp, fn, tn = (c[k] for k in COUNT_KEYS)
+    if tp + fp + fn == 0:  # nothing to find and nothing predicted
+        precision = recall = f1 = 1.0
+    else:
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        )
+    total = tp + fp + fn + tn
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "accuracy": (tp + tn) / total if total else 0.0,
+    }
+
+
 def build_comparison_payload(
     predicted_output: dict[str, Any],
     expected_output: dict[str, Any],
@@ -375,6 +441,7 @@ def build_comparison_payload(
             if not field["gt_present"] and field["score"] < 1.0
         ),
         "fields": comparison,
+        "classification": classification_counts(comparison),
     }
 
 
@@ -432,3 +499,17 @@ def average_score_evaluator(item_results: list[Any], **kwargs: Any) -> Evaluatio
         name="run_average_score",
         value=avg,
     )
+
+
+def classification_run_evaluator(
+    item_results: list[Any], **kwargs: Any
+) -> list[Evaluation]:
+    """Pool counts across items, then compute P/R/F1/accuracy per field."""
+    pooled = pool_counts(
+        result.output["comparison"]["classification"] for result in item_results
+    )
+    return [
+        Evaluation(name=f"run_{name}_{metric}", value=value)
+        for name, counts in pooled.items()
+        for metric, value in metrics_from_counts(counts).items()
+    ]
