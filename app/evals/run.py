@@ -27,7 +27,10 @@ from .dataset import (
 from .evaluators import (
     average_score_evaluator,
     build_comparison_payload,
+    classification_run_evaluator,
     item_summary_evaluator,
+    metrics_from_counts,
+    pool_counts,
 )
 from .prompts import sync_extraction_prompt
 
@@ -69,17 +72,17 @@ def save_local_results(
     model: str,
     run_info: dict[str, Any] | None = None,
 ) -> Path:
-    """Write a local run's per-item results and average score to disk as JSON."""
+    """Write a run's per-item results, average score and metrics to disk as JSON."""
     scores = [item["comparison"]["average_score"] for item in results]
+    pooled = pool_counts(item["comparison"]["classification"] for item in results)
     payload = {
         "extractor": extractor,
         "model": model,
-        **(run_info or {}),
         "item_count": len(results),
         "average_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
+        "metrics": {name: metrics_from_counts(c) for name, c in pooled.items()},
         "items": results,
     }
-
     results_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     filename = f"{extractor}__{model.replace('/', '_')}__{timestamp}.json"
@@ -196,7 +199,7 @@ def _run_langfuse(client, prompt_ref, data, extract, extractor, settings) -> lis
         },
         task=task,
         evaluators=[item_summary_evaluator],
-        run_evaluators=[average_score_evaluator],
+        run_evaluators=[average_score_evaluator, classification_run_evaluator],
     )
     print(experiment.format())
     return results
