@@ -16,6 +16,7 @@ import json
 import os
 import statistics
 from pathlib import Path
+from typing import TypedDict
 
 # Mirrors the fields build_comparison_payload leaves out of the average score.
 DIAGNOSTIC_FIELDS = {"creators_orcid", "creators_affiliation"}
@@ -77,6 +78,20 @@ def fmt_change(change: float | None) -> str:
     return f"{indicator} {change:+.3f}"
 
 
+class Row(TypedDict):
+    """One model's row in the run's leaderboard tables."""
+
+    model: str
+    run_score: float
+    shared_score: float | None
+    change: float | None
+    own: float
+    items: str
+    errors: str
+    duration: str
+    median: str
+
+
 def summarize(results_dir: Path, run_id: str, missing: list[str]) -> str:
     """Build the README for one run."""
     results = load_model_results(results_dir / run_id)
@@ -109,7 +124,7 @@ def summarize(results_dir: Path, run_id: str, missing: list[str]) -> str:
             + "; those results come from the local fallback.",
         ]
 
-    rows = []
+    rows: list[Row] = []
     for model, payload in results.items():
         scored = items[model]
         previous = previous_results(results_dir, run_id, model)
