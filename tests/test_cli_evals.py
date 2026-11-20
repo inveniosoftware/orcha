@@ -1,4 +1,7 @@
 import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import Mock
 
 from typer.testing import CliRunner
@@ -99,3 +102,15 @@ def test_run_evals_can_enable_langfuse_and_save_json(monkeypatch):
         cache=None,
         target=None,
     )
+
+
+def test_cli_imports_without_the_langfuse_extra():
+    """Any `orcha` command must start without the optional 'langfuse' extra."""
+    code = "import sys; sys.modules['langfuse'] = None; import app.cli.main"
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr

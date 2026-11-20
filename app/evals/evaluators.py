@@ -2,11 +2,22 @@
 # SPDX-License-Identifier: MIT
 
 import re
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from itertools import zip_longest
 from typing import Any
 
-from langfuse import Evaluation
+try:
+    from langfuse import Evaluation
+except ModuleNotFoundError:
+
+    @dataclass
+    class Evaluation:
+        """Score object used when the optional 'langfuse' extra is absent."""
+
+        name: str
+        value: Any
+        metadata: dict[str, Any] | None = None
 
 
 def norm_name(name: Any) -> str:
