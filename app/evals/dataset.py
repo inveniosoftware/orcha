@@ -10,8 +10,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from langfuse.api import NotFoundError
-
 
 def _expected_output_from_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Map dataset metadata to the expected output schema."""
@@ -120,6 +118,8 @@ def get_or_create_langfuse_dataset(
     samples: int | None = None,
 ) -> Any:
     """Get or create a Langfuse dataset and return the requested items."""
+    from langfuse.api import NotFoundError
+
     try:
         langfuse_dataset = langfuse.get_dataset(name=dataset_name)
         existing_ids = {item.id for item in langfuse_dataset.items}

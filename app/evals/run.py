@@ -154,10 +154,10 @@ def _connect_langfuse(items, prompt_name, samples, ignore_errors=False):
     Returns the client, prompt reference, and Langfuse dataset items, or None
     when Langfuse is unavailable and ``ignore_errors`` is set.
     """
-    from langfuse import get_client
-
-    client = get_client()
     try:
+        from langfuse import get_client
+
+        client = get_client()
         prompt_ref = sync_extraction_prompt(client, prompt_name)
         data = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
     except Exception as exc:
