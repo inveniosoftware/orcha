@@ -1,5 +1,9 @@
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 
+from app.evals.dataset import get_or_create_langfuse_dataset
 from app.evals.run import _connect_langfuse, format_scores
 
 ITEMS = [
@@ -19,13 +23,13 @@ def unreachable_langfuse(monkeypatch):
 
 def test_connect_langfuse_returns_none_when_ignoring_errors(unreachable_langfuse):
     """With ignore_errors, an unreachable Langfuse means running without it."""
-    assert _connect_langfuse(ITEMS, "prompt", None, ignore_errors=True) is None
+    assert _connect_langfuse(ITEMS, "prompt", ignore_errors=True) is None
 
 
 def test_connect_langfuse_raises_without_ignore_errors(unreachable_langfuse):
     """Without ignore_errors, an unreachable Langfuse fails the run."""
     with pytest.raises(Exception):
-        _connect_langfuse(ITEMS, "prompt", None)
+        _connect_langfuse(ITEMS, "prompt")
 
 
 def test_format_scores_matches_the_langfuse_summary():
@@ -63,3 +67,15 @@ def test_format_scores_matches_the_langfuse_summary():
         "Run Evaluations:",
         "  • run_average_score: 0.620",
     ]
+
+
+def test_langfuse_dataset_returns_only_the_items_being_run():
+    """Items stored in Langfuse but not being run are left out."""
+    stored = [SimpleNamespace(id=item_id) for item_id in ("a", "b", "stale")]
+    langfuse = Mock()
+    langfuse.get_dataset.return_value = SimpleNamespace(items=stored)
+
+    data = get_or_create_langfuse_dataset(langfuse, "dataset", ITEMS[:1])
+
+    assert [item.id for item in data] == ["a"]
+    langfuse.create_dataset_item.assert_not_called()

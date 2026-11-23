@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from app.evals.dataset import CATEGORIES
 from app.evals.dataset_sync import sync_dataset
 from app.evals.run import ITEM_TIMEOUT
 from app.evals.run import run as run_evaluation
@@ -82,6 +83,15 @@ def run(
     samples: int | None = typer.Option(
         None, "--samples", help="Sample this many items, proportionally per category."
     ),
+    categories: list[str] | None = typer.Option(
+        None,
+        "--category",
+        help=(
+            "Only evaluate this category, by prefix or name. Repeat for more "
+            "than one. Options: "
+            + ", ".join(f"{prefix} ({name})" for prefix, name in CATEGORIES.items())
+        ),
+    ),
     seed: int = typer.Option(42, "--seed", help="Seed for the sampling."),
     item_timeout: float = typer.Option(
         ITEM_TIMEOUT,
@@ -113,6 +123,7 @@ def run(
                 ignore_langfuse_errors=ignore_langfuse_errors,
                 save_json=save_json,
                 samples=samples,
+                categories=categories,
                 seed=seed,
                 item_timeout=item_timeout,
                 results_dir=output,
@@ -120,7 +131,7 @@ def run(
                 target=target,
             )
         )
-    except FileNotFoundError as error:
+    except (FileNotFoundError, ValueError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(1) from error
     except ModuleNotFoundError as error:
