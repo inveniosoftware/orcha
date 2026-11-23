@@ -59,6 +59,8 @@ evals:
           - glm-5.3-flash-int4
           - gemma-4-12b-it-qat-w4a16-ct
           - qwen3.8-27b-fp16
+          - qwen3.8-flash-next-int4
+
   # Read-only: sync_dataset already filled it; a cold cache refetches from Zenodo.
   cache:
     key: orcha-eval-dataset

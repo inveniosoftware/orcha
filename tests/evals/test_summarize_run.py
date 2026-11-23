@@ -26,6 +26,9 @@ def _write(results_dir, run_id, model, scores, **run_info):
         **run_info,
         "item_count": len(items),
         "average_score": sum(scores.values()) / len(scores),
+        "metrics": {
+            "title": {"f1": sum(scores.values()) / len(scores)},
+        },
         "items": items,
     }
     (folder / "results.json").write_text(json.dumps(payload))
@@ -76,3 +79,5 @@ def test_summary_ranks_whole_run_and_shared_items(tmp_path):
     assert "creators_orcid" not in readme
     assert "Langfuse was unavailable for model-a" in readme
     assert "Models with no results this run: model-c." in readme
+    # F1 table: columns follow the shared-items order (model-b, model-a).
+    assert "| title | 0.400 | **0.467** |" in readme.split("## F1 per field")[1]

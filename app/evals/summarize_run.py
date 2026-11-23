@@ -233,6 +233,23 @@ def summarize(results_dir: Path, run_id: str, missing: list[str]) -> str:
         ]
         lines.append(f"| {field} | " + " | ".join(cells) + " |")
 
+    # Pooled F1 per field, from the metrics saved in each results JSON.
+    lines += [
+        "",
+        "## F1 per field",
+        "",
+        "Pass/fail F1, pooled over each model's completed items. "
+        "Best per field in bold.",
+        "",
+        "| Field | " + " | ".join(models) + " |",
+        "|---|" + "---:|" * len(models),
+    ]
+    for field in results[models[0]]["metrics"]:
+        f1 = {model: results[model]["metrics"][field]["f1"] for model in models}
+        best = max(f1.values())
+        cells = [f"**{v:.3f}**" if v == best else f"{v:.3f}" for v in f1.values()]
+        lines.append(f"| {field} | " + " | ".join(cells) + " |")
+
     lines += [
         "",
         "Models with no results this run: "
