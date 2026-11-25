@@ -22,10 +22,10 @@ class Creator(BaseModel):
         description="Full name in '<family>, <given>' format",
         examples=["Doe, Jane", "van der Berg, A."],
     )
-    affiliation: str | None = Field(
-        default=None,
-        description="Institution or organization the creator is affiliated with",
-        examples=["CERN", "University of Cambridge"],
+    affiliations: list[str] = Field(
+        default_factory=list,
+        description="Institutions or organizations the creator is affiliated with",
+        examples=[["CERN", "University of Cambridge"]],
     )
     orcid: str | None = Field(
         default=None,
@@ -158,8 +158,8 @@ class MetadataSuggestions(BaseModel):
                     Creator(
                         name=name,
                         orcid=orcid,
-                        affiliation=(
-                            metadata.at(metadata.creator_affiliations, i) or None
+                        affiliations=metadata.affiliations_at(
+                            metadata.creator_affiliations, i
                         ),
                     )
                 )

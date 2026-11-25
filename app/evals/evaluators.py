@@ -41,20 +41,24 @@ def norm_doi(doi: Any) -> str:
 
 def creator_records(source: dict[str, Any]) -> list[dict[str, Any]]:
     """Return creator rows in the flat app schema."""
-    return [
-        {
-            "name": name,
-            "orcid": orcid,
-            "affiliation": [{"name": affiliation}] if affiliation else [],
-        }
-        for name, orcid, affiliation in zip_longest(
-            source.get("creators") or [],
-            source.get("creator_orcids") or [],
-            source.get("creator_affiliations") or [],
-            fillvalue="",
-        )
-        if name or orcid or affiliation
-    ]
+    records = []
+    for name, orcid, affiliations in zip_longest(
+        source.get("creators") or [],
+        source.get("creator_orcids") or [],
+        source.get("creator_affiliations") or [],
+        fillvalue="",
+    ):
+        # `or []` covers a creator with no entry (the "" fillvalue).
+        affiliations = [a for a in affiliations or [] if a]
+        if name or orcid or affiliations:
+            records.append(
+                {
+                    "name": name,
+                    "orcid": orcid,
+                    "affiliation": [{"name": a} for a in affiliations],
+                }
+            )
+    return records
 
 
 def sym_score(exp_vals: list, pred_vals: list, sim: Any) -> tuple[float, bool]:

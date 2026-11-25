@@ -18,7 +18,11 @@ from app.activities.extract_metadata import (
     _clear_absent_fields,
     extract_metadata_with_llm,
 )
-from app.schemas.metadata_suggestions import ExtractedMetadata, MetadataSuggestions
+from app.schemas.metadata_suggestions import (
+    CreatorsSuggestion,
+    ExtractedMetadata,
+    MetadataSuggestions,
+)
 from app.workflows.specs import WorkflowContext
 
 SOURCE = (
@@ -102,3 +106,20 @@ def test_skip_empty_returns_no_suggestions(text):
     result = asyncio.run(extract_metadata_with_llm(request, context))
     raw_suggestions = MetadataSuggestions.from_extracted(result)
     assert raw_suggestions.suggestions == []
+
+
+def test_creator_keeps_all_affiliations():
+    """Each creator gets every affiliation, with blanks dropped."""
+    metadata = ExtractedMetadata(
+        creators=["Doe, Jane", "Smith, John", "Roe, Ann"],
+        creator_affiliations=[["CERN", "University of Oxford"], ["", "ETH Zurich"]],
+    )
+
+    [creators] = MetadataSuggestions.from_extracted(metadata).suggestions
+    assert isinstance(creators, CreatorsSuggestion)
+
+    assert [c.affiliations for c in creators.value] == [
+        ["CERN", "University of Oxford"],
+        ["ETH Zurich"],
+        [],
+    ]
