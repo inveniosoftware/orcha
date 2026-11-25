@@ -67,18 +67,21 @@ class ExtractedMetadata(BaseModel):
         ),
         examples=[["0000-0002-1111-1115", ""]],
     )
-    creator_affiliations: list[str] = Field(
+    creator_affiliations: list[list[str]] = Field(
         default_factory=list,
         description=(
-            "Affiliation per creator, parallel to `creators`; empty string when "
-            "unknown. Affiliations are often marked with numbers or symbols after "
-            "author names; resolve each author's marker to its affiliation. Copy "
-            "the affiliation as written, including any department or institute, "
-            "but leave out the marker and any street address, city, postal code, "
-            "or country: 'CERN, Geneva, Switzerland' -> 'CERN'. If an author has "
-            "several affiliations, give the first."
+            "Affiliations per creator, parallel to `creators` so "
+            "creator_affiliations[i] lists every affiliation of creators[i]; empty "
+            "list when unknown. Affiliations are often marked with numbers or "
+            "symbols after author names; resolve each of an author's markers to "
+            "its affiliation, e.g. 'Smith1,2' gets affiliations 1 and 2. Copy each "
+            "affiliation as written, including any department or institute, but "
+            "leave out the marker and any street address, city, postal code, or "
+            "country: 'CERN, Geneva, Switzerland' -> 'CERN'."
         ),
-        examples=[["CERN", "Department of Physics, University of Oxford"]],
+        examples=[
+            [["CERN", "University of Oxford"], ["Department of Physics, ETH Zurich"]]
+        ],
     )
     doi: str | None = Field(
         default=None,
@@ -151,3 +154,10 @@ class ExtractedMetadata(BaseModel):
     def at(values: list[str], i: int) -> str:
         """Return the i-th parallel value, or '' when the list is shorter."""
         return values[i] if i < len(values) else ""
+
+    @staticmethod
+    def affiliations_at(values: list[list[str]], i: int) -> list[str]:
+        """Return the non-empty i-th creator's affiliations, or [] if missing."""
+        if i >= len(values):
+            return []
+        return [a.strip() for a in values[i] if a and a.strip()]

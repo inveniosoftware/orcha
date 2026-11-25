@@ -72,3 +72,24 @@ def test_creator_attributes_stay_attached_to_their_authors():
 
     assert result["creators_orcid"]["score"] == 1.0
     assert result["creators_orcid_indexed"]["score"] == 0.0
+
+
+def test_creator_with_multiple_affiliations_scores_each():
+    """Every affiliation of an author is compared, not just the first."""
+    expected = {
+        "creators": [
+            {
+                "name": "Doe, Jane",
+                "affiliation": [{"name": "CERN"}, {"name": "University of Oxford"}],
+            },
+        ]
+    }
+    predicted = {
+        "creators": ["Doe, Jane"],
+        "creator_affiliations": [["CERN", "University of Oxford"]],
+    }
+
+    result = Evaluator({"expected_output": expected}, predicted).creators_eval()
+
+    assert result["creators_affiliation"]["score"] == 1.0
+    assert result["creators_affiliation_indexed"]["score"] == 1.0
