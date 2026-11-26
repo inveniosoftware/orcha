@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.extractors import get_extractor
 
 from .dataset import (
+    filter_categories,
     get_or_create_langfuse_dataset,
     load_local_dataset,
     sample_items,
@@ -151,7 +152,7 @@ def format_scores(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _connect_langfuse(items, prompt_name, samples, ignore_errors=False):
+def _connect_langfuse(items, prompt_name, ignore_errors=False):
     """Sync the prompt and dataset to Langfuse.
 
     Returns the client, prompt reference, and Langfuse dataset items, or None
@@ -162,7 +163,7 @@ def _connect_langfuse(items, prompt_name, samples, ignore_errors=False):
 
         client = get_client()
         prompt_ref = sync_extraction_prompt(client, prompt_name)
-        data = get_or_create_langfuse_dataset(client, DATASET_NAME, items, samples)
+        data = get_or_create_langfuse_dataset(client, DATASET_NAME, items)
     except Exception as exc:
         if not ignore_errors:
             raise
@@ -212,6 +213,7 @@ async def run(
     ignore_langfuse_errors: bool = False,
     save_json: bool = False,
     samples: int | None = None,
+    categories: list[str] | None = None,
     seed: int = 42,
     item_timeout: float = ITEM_TIMEOUT,
     results_dir: Path | None = None,
@@ -220,7 +222,10 @@ async def run(
 ):
     """Run extraction and evaluation experiment."""
     dataset_root = _resolve_dataset_root(cache, target)
-    items = sample_items(load_local_dataset(dataset_root, DATASET_NAME), samples, seed)
+    items = filter_categories(
+        load_local_dataset(dataset_root, DATASET_NAME), categories
+    )
+    items = sample_items(items, samples, seed)
     settings = get_settings()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -261,7 +266,7 @@ async def run(
 
     started = time.perf_counter()
     langfuse = (
-        _connect_langfuse(items, prompt_name, samples, ignore_langfuse_errors)
+        _connect_langfuse(items, prompt_name, ignore_langfuse_errors)
         if use_langfuse
         else None
     )

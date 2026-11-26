@@ -69,6 +69,38 @@ def load_local_dataset(dataset_root: Path, dataset_name: str) -> list[dict[str, 
     return items
 
 
+# Dataset categories by file-name prefix, e.g. ART_100000__....pdf is in Articles/.
+CATEGORIES = {
+    "ART": "Articles",
+    "BOK": "Book",
+    "BKC": "Book_chapter",
+    "CFP": "Conference_papers",
+    "EXN": "Experiment_note",
+    "PST": "Poster",
+    "PRP": "Preprint",
+    "RPT": "Reports",
+    "SLD": "Slides",
+    "THS": "Thesis",
+}
+
+
+def filter_categories(items: list[dict], categories: list[str] | None) -> list[dict]:
+    """Keep only items in ``categories``, by name or prefix (Articles or ART).
+
+    Every item is kept when no categories are given.
+    """
+    if not categories:
+        return items
+    # Turn prefixes into names (ART -> Articles). Full names stay as they are.
+    names = [CATEGORIES.get(c, c) for c in categories]
+    for name in names:
+        if name not in CATEGORIES.values():
+            raise ValueError(
+                f"Unknown category: {name}. Run `orcha evals run --help` to list them."
+            )
+    return [item for item in items if item["input"]["category"] in names]
+
+
 def sample_items(
     items: list[dict[str, Any]],
     samples: int | None,
@@ -115,9 +147,8 @@ def get_or_create_langfuse_dataset(
     langfuse: Any,
     dataset_name: str,
     dataset_items: list[dict[str, Any]],
-    samples: int | None = None,
 ) -> Any:
-    """Get or create a Langfuse dataset and return the requested items."""
+    """Get or create a Langfuse dataset and return its copies of ``dataset_items``."""
     from langfuse.api import NotFoundError
 
     try:
@@ -137,9 +168,6 @@ def get_or_create_langfuse_dataset(
             )
 
     langfuse_dataset = langfuse.get_dataset(name=dataset_name)
-
-    if samples is None:
-        return list(langfuse_dataset.items)
 
     items_by_id = {item.id: item for item in langfuse_dataset.items}
     return [items_by_id[item["id"]] for item in dataset_items]
